@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <rect width="400" height="400" fill="#F1F5F9"/>
+  <rect x="140" y="140" width="120" height="120" rx="20" fill="#E2E8F0"/>
+  <path d="M170 210 L195 185 L230 220 M210 200 L220 190 L235 205" stroke="#94A3B8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="180" cy="175" r="8" fill="#94A3B8"/>
+  <text x="200" y="290" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="#94A3B8">MH EL MAHDY</text>
+</svg>

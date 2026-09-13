@@ -1,0 +1,29 @@
+'use client';
+
+import React from 'react';
+import { useStore } from '@/context/StoreContext';
+import { ProductManager } from '@/components/admin/ProductManager';
+
+export default function AdminProductsPage() {
+  const {
+    products,
+    categories,
+    staffSession,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+  } = useStore();
+
+  if (!staffSession) return null;
+
+  return (
+    <ProductManager
+      products={products}
+      categories={categories}
+      currentRole={staffSession.role}
+      onAddProduct={addProduct}
+      onUpdateProduct={updateProduct}
+      onDeleteProduct={deleteProduct}
+    />
+  );
+}
