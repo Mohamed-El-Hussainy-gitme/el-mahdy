@@ -33,6 +33,7 @@ interface ProductManagerProps {
   onAddProduct: (product: any) => void | Promise<any>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => void | Promise<void>;
   onDeleteProduct: (id: string) => void | Promise<void>;
+  onToggleActive?: (id: string, active: boolean) => void | Promise<void>;
 }
 
 export const ProductManager: React.FC<ProductManagerProps> = ({
@@ -42,6 +43,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
+  onToggleActive,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -350,7 +352,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                   const linkedCategories = categories.filter((c) => p.category_ids?.includes(c.id));
 
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50/70 transition">
+                    <tr key={p.id} className={`hover:bg-slate-50/70 transition ${!p.is_active ? 'opacity-50' : ''}`}>
                       {/* Product image & title */}
                       <td className="p-3.5">
                         <div className="flex items-center gap-3">
@@ -422,9 +424,25 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                         )}
                       </td>
 
-                      {/* Badges */}
+                      {/* Badges + is_active toggle */}
                       <td className="p-3.5">
                         <div className="flex flex-wrap items-center gap-1.5">
+                          {/* Active toggle (admin only) */}
+                          {isAdmin && onToggleActive && (
+                            <button
+                              type="button"
+                              onClick={() => onToggleActive(p.id, !p.is_active)}
+                              title={p.is_active ? 'إخفاء المنتج من الكتالوج' : 'إظهار المنتج في الكتالوج'}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                                p.is_active
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200'
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${p.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                              {p.is_active ? 'مفعّل' : 'مخفي'}
+                            </button>
+                          )}
                           {p.is_exchange_only && (
                             <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold">
                               قابل للاستبدال فقط

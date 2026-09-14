@@ -12,6 +12,7 @@ export default function AdminProductsPage() {
     addProduct,
     updateProduct,
     deleteProduct,
+    toggleProductActive,
   } = useStore();
 
   if (!staffSession) return null;
@@ -24,6 +25,7 @@ export default function AdminProductsPage() {
       onAddProduct={addProduct}
       onUpdateProduct={updateProduct}
       onDeleteProduct={deleteProduct}
+      onToggleActive={toggleProductActive}
     />
   );
 }
