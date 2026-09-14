@@ -7,7 +7,7 @@ import { StaffManager } from '@/components/admin/StaffManager';
 export default function AdminStaffPage() {
   const { staffSession } = useStore();
 
-  if (!staffSession) return null;
+  if (!staffSession || staffSession.role !== 'admin') return null;
 
   return <StaffManager currentRole={staffSession.role} />;
 }

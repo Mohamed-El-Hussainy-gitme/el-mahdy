@@ -7,7 +7,7 @@ import { SettingsManager } from '@/components/admin/SettingsManager';
 export default function AdminSettingsPage() {
   const { staffSession } = useStore();
 
-  if (!staffSession) return null;
+  if (!staffSession || staffSession.role !== 'admin') return null;
 
   return <SettingsManager currentRole={staffSession.role} />;
 }

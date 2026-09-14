@@ -144,10 +144,20 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
           <div>
             <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
               <Truck className="w-6 h-6 text-[#0099DD]" />
-              <span>إدارة الطلبات ودورة الحياة ({filteredOrders.length})</span>
+              <span>
+                {staffSession.role === 'sales_agent'
+                  ? `طلبات عملائي ومتابعة المبيعات (${filteredOrders.length})`
+                  : (staffSession.role as string) === 'warehouse_preparer' || (staffSession.role as string) === 'warehouse'
+                  ? `أوامر التجهيز والشحن بالمستودع (${filteredOrders.length})`
+                  : `إدارة الطلبات ودورة الحياة (${filteredOrders.length})`}
+              </span>
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              دورة حياة رباعية: قيد المراجعة (تأكيد المندوب) ← التجهيز (المستودع) ← الشحن ← التسليم / المرتجع.
+              {staffSession.role === 'sales_agent'
+                ? 'مراجعة طلبات عملائك، تأكيدها ونقلها إلى التجهيز، أو المطالبة بالطلبات المعلقة.'
+                : (staffSession.role as string) === 'warehouse_preparer' || (staffSession.role as string) === 'warehouse'
+                ? 'تجهيز بضائع الطلبات، طباعة إذن الصرف وفاتورة التسليم، وتسجيل شركة الشحن والبوليصة.'
+                : 'دورة حياة رباعية: قيد المراجعة (تأكيد المندوب) ← التجهيز (المستودع) ← الشحن ← التسليم / المرتجع.'}
             </p>
           </div>
 
@@ -177,14 +187,21 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
 
         {/* Status Filter Buttons */}
         <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-          {[
-            { id: 'all', label: 'كل الطلبات المتاحة' },
-            { id: 'pending', label: '1. قيد المراجعة' },
-            { id: 'preparation', label: '2. جاري التجهيز' },
-            { id: 'shipping', label: '3. تم الشحن' },
-            { id: 'delivered', label: '4. تم التسليم' },
-            { id: 'returned', label: 'مرتجع' },
-          ].map((tab) => (
+          {((staffSession.role as string) === 'warehouse_preparer' || (staffSession.role as string) === 'warehouse'
+            ? [
+                { id: 'all', label: 'كل أوامر المستودع' },
+                { id: 'preparation', label: '1. أوامر جاري التجهيز' },
+                { id: 'shipping', label: '2. شحنات قيد التوصيل' },
+              ]
+            : [
+                { id: 'all', label: staffSession.role === 'sales_agent' ? 'كل طلباتي' : 'كل الطلبات' },
+                { id: 'pending', label: '1. قيد المراجعة' },
+                { id: 'preparation', label: '2. جاري التجهيز' },
+                { id: 'shipping', label: '3. تم الشحن' },
+                { id: 'delivered', label: '4. تم التسليم' },
+                { id: 'returned', label: 'مرتجع' },
+              ]
+          ).map((tab) => (
             <button
               key={tab.id}
               onClick={() => setStatusFilter(tab.id)}

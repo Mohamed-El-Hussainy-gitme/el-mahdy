@@ -20,19 +20,26 @@ import {
 import { useStore } from '@/context/StoreContext';
 
 export function ExecutiveDashboard() {
-  const { orders, products, customers, shortages } = useStore();
+  const { orders, products, customers, shortages, staffSession } = useStore();
+  const isSalesAgent = staffSession?.role === 'sales_agent';
 
-  // Metrics
+  // Metrics tailored by role
   const stats = useMemo(() => {
-    const totalRevenue = orders
+    // For sales agent, only count orders assigned to them (or unassigned pending)
+    const accessibleOrders = isSalesAgent && staffSession
+      ? orders.filter((o) => !o.sales_agent_id || o.sales_agent_id === staffSession.id)
+      : orders;
+
+    const myDeliveredOrders = accessibleOrders.filter((o) => o.status === 'delivered');
+    const totalRevenue = accessibleOrders
       .filter((o) => o.status !== 'returned')
       .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
 
-    const pendingOrders = orders.filter((o) => o.status === 'pending');
-    const prepOrders = orders.filter((o) => o.status === 'preparation');
-    const shippingOrders = orders.filter((o) => o.status === 'shipping');
-    const deliveredOrders = orders.filter((o) => o.status === 'delivered');
-    const returnedOrders = orders.filter((o) => o.status === 'returned');
+    const pendingOrders = accessibleOrders.filter((o) => o.status === 'pending');
+    const prepOrders = accessibleOrders.filter((o) => o.status === 'preparation');
+    const shippingOrders = accessibleOrders.filter((o) => o.status === 'shipping');
+    const deliveredOrders = myDeliveredOrders;
+    const returnedOrders = accessibleOrders.filter((o) => o.status === 'returned');
 
     // Orders pending > 48 hours
     const now = Date.now();
@@ -60,9 +67,14 @@ export function ExecutiveDashboard() {
     // Unreviewed shortages
     const pendingShortages = shortages.filter((s) => s.status === 'pending');
 
+    // Assigned customers count
+    const relevantCustomers = isSalesAgent && staffSession
+      ? customers.filter((c) => c.assigned_sales_rep_id === staffSession.id)
+      : customers;
+
     return {
       totalRevenue,
-      totalOrders: orders.length,
+      totalOrders: accessibleOrders.length,
       pendingCount: pendingOrders.length,
       prepCount: prepOrders.length,
       shippingCount: shippingOrders.length,
@@ -72,9 +84,9 @@ export function ExecutiveDashboard() {
       outOfStockCount,
       limitedStockCount,
       pendingShortagesCount: pendingShortages.length,
-      customersCount: customers.length,
+      customersCount: relevantCustomers.length,
     };
-  }, [orders, products, customers, shortages]);
+  }, [orders, products, customers, shortages, isSalesAgent, staffSession]);
 
   // Top ordered models calculation
   const topModels = useMemo(() => {
@@ -130,20 +142,34 @@ export function ExecutiveDashboard() {
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 text-xs font-bold border border-sky-500/30">
             <ShieldCheck className="w-4 h-4 text-sky-400" />
-            <span>لوحة القيادة والمؤشرات التنفيذية (B2B Executive)</span>
+            <span>
+              {isSalesAgent
+                ? 'لوحة مبيعات المندوب المعتمد (Sales Agent Dashboard)'
+                : 'لوحة القيادة والمؤشرات التنفيذية (B2B Executive)'}
+            </span>
           </div>
-          <h1 className="text-2xl font-black">مرحباً بك في مركز إدارة MH EL MAHDY</h1>
+          <h1 className="text-2xl font-black">
+            {isSalesAgent
+              ? `مرحباً بك، ${staffSession?.full_name || 'مندوب المبيعات'}`
+              : 'مرحباً بك في مركز إدارة MH EL MAHDY'}
+          </h1>
           <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-            متابعة حية وشاملة للمبيعات، وحركات المستودع، وطلبات العملاء، والنواقص والمناديب المعتمدين.
+            {isSalesAgent
+              ? 'متابعة حية لطلبات عملائك المسجلين، الطلبات المعلقة المطلوب مراجعتها وتأكيدها، والتواصل المباشر مع العملاء.'
+              : 'متابعة حية وشاملة للمبيعات، وحركات المستودع، وطلبات العملاء، والنواقص والمناديب المعتمدين.'}
           </p>
         </div>
 
         <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 text-left md:text-right">
-          <span className="text-[11px] text-slate-300 block">إجمالي مبيعات المتجر المحققة</span>
+          <span className="text-[11px] text-slate-300 block">
+            {isSalesAgent ? 'إجمالي مبيعات طلباتك المحققة' : 'إجمالي مبيعات المتجر المحققة'}
+          </span>
           <span className="text-2xl font-black text-sky-400 font-mono">
             {stats.totalRevenue.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
           </span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">بدون الطلبات المرتجعة</span>
+          <span className="text-[10px] text-slate-400 block mt-0.5">
+            {isSalesAgent ? 'للطلبات المسندة إليك' : 'بدون الطلبات المرتجعة'}
+          </span>
         </div>
       </div>
 
@@ -350,9 +376,13 @@ export function ExecutiveDashboard() {
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <div className="font-bold text-xs text-slate-900">إدارة العملاء والمناديب</div>
+            <div className="font-bold text-xs text-slate-900">
+              {isSalesAgent ? 'عملائي المعتمدون' : 'إدارة العملاء والمناديب'}
+            </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              {stats.customersCount} عميل مسجل • ربط المندوب الدائم
+              {isSalesAgent
+                ? `${stats.customersCount} عميل مسند إليك • تواصل واتساب مباشر`
+                : `${stats.customersCount} عميل مسجل • ربط المندوب الدائم`}
             </div>
           </div>
         </Link>

@@ -301,9 +301,9 @@ export const CompatibilityMatrixManager: React.FC<CompatibilityMatrixManagerProp
         </div>
 
         {!isAdmin && (
-          <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-1.5 rounded-xl text-xs font-semibold border border-amber-200">
-            <ShieldAlert className="w-4 h-4" />
-            <span>عرض فقط</span>
+          <div className="flex items-center gap-1.5 text-sky-700 bg-sky-50 px-3 py-1.5 rounded-xl text-xs font-bold border border-sky-200">
+            <CheckCircle2 className="w-4 h-4 text-[#0099DD]" />
+            <span>استعراض توافق الموديلات والمخزون</span>
           </div>
         )}
       </div>

@@ -13,6 +13,7 @@ import {
   Shield,
   Save,
   CheckCircle2,
+  MessageCircle,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
 import { UserProfile, UserRole } from '@/types';
@@ -54,8 +55,18 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
     return map;
   }, [orders]);
 
+  const isAdmin = currentRole === 'admin';
+  const isSalesAgent = currentRole === 'sales_agent';
+
   const filteredCustomers = useMemo(() => {
     return customers.filter((c) => {
+      // If sales agent, strictly show only their assigned customers
+      if (isSalesAgent && staffSession) {
+        if (c.assigned_sales_rep_id !== staffSession.id) {
+          return false;
+        }
+      }
+
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
         !q ||
@@ -64,13 +75,14 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
         (c.company_name && c.company_name.toLowerCase().includes(q));
 
       const matchRep =
+        isSalesAgent ||
         selectedRepFilter === 'all' ||
         (selectedRepFilter === 'unassigned' && !c.assigned_sales_rep_id) ||
         c.assigned_sales_rep_id === selectedRepFilter;
 
       return matchSearch && matchRep;
     });
-  }, [customers, searchQuery, selectedRepFilter]);
+  }, [customers, searchQuery, selectedRepFilter, isSalesAgent, staffSession]);
 
   const handleStartReassign = (cust: UserProfile) => {
     setEditingCustomer(cust.id);
@@ -85,8 +97,6 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
     setEditingCustomer(null);
   };
 
-  const isAdmin = currentRole === 'admin';
-
   return (
     <div className="space-y-6">
       {/* Header & Sticky Rep Rule Explanation */}
@@ -95,10 +105,16 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
           <div>
             <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
               <Users className="w-6 h-6 text-[#0099DD]" />
-              <span>إدارة العملاء وربط المناديب (Sticky Sales Rep)</span>
+              <span>
+                {isSalesAgent
+                  ? `قائمة عملائي المعتمدين (${filteredCustomers.length})`
+                  : `إدارة العملاء وربط المناديب (${customers.length} عميل)`}
+              </span>
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              إجمالي العملاء المسجلين: <span className="font-bold text-slate-900">{customers.length} عميل B2B</span>.
+              {isSalesAgent
+                ? 'العملاء التجاريين المربوطين بحسابك لخدمتهم وتأكيد طلباتهم والتواصل المباشر عبر واتساب.'
+                : 'سجل العملاء التجاريين وإحصائيات طلباتهم وتعيين المندوب الدائم (Sticky Sales Rep).'}
             </p>
           </div>
 
@@ -115,18 +131,20 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
               />
             </div>
 
-            {/* Rep Filter */}
-            <select
-              value={selectedRepFilter}
-              onChange={(e) => setSelectedRepFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl text-xs border border-slate-300 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#0099DD]"
-            >
-              <option value="all">كل المناديب</option>
-              <option value="unassigned">بدون مندوب معين</option>
-              {salesAgents.map((sa) => (
-                <option key={sa.id} value={sa.id}>{sa.full_name}</option>
-              ))}
-            </select>
+            {/* Rep Filter - Admin Only */}
+            {isAdmin && (
+              <select
+                value={selectedRepFilter}
+                onChange={(e) => setSelectedRepFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl text-xs border border-slate-300 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#0099DD]"
+              >
+                <option value="all">كل المناديب</option>
+                <option value="unassigned">بدون مندوب معين</option>
+                {salesAgents.map((sa) => (
+                  <option key={sa.id} value={sa.id}>{sa.full_name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
@@ -135,7 +153,7 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
           <UserCheck className="w-4 h-4 text-[#0099DD] shrink-0 mt-0.5" />
           <div className="leading-relaxed">
             <span className="font-bold">قاعدة المندوب الدائم (Sticky Sales Rep): </span>
-            يرتبط العميل بمندوب مبيعات معتمد فور تأكيد أول طلب أو تعيينه من قِبل الإدارة. جميع طلبات العميل الحالية
+            يرتبط العميل بمندوب مبيعات معتمد فور تأكيد أول طلب. جميع طلبات العميل الحالية
             والمستقبلية تُحال تلقائياً إلى هذا المندوب لضمان استمرارية خدمة حسابات الجملة.
           </div>
         </div>
@@ -192,6 +210,18 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
                         {c.email && (
                           <div className="text-[10px] text-slate-400 mt-0.5">{c.email}</div>
                         )}
+                        <div className="mt-1">
+                          <a
+                            href={`https://wa.me/${c.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`مرحباً ${c.full_name}، معك مندوبك المعتمد من متجر MH EL MAHDY.`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition"
+                            title="محادثة واتساب مباشرة مع العميل"
+                          >
+                            <MessageCircle className="w-3 h-3 text-emerald-600" />
+                            <span>محادثة واتساب</span>
+                          </a>
+                        </div>
                       </td>
 
                       {/* Sticky Sales Rep */}

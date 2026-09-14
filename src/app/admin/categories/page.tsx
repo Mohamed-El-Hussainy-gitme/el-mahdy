@@ -15,7 +15,7 @@ export default function AdminCategoriesPage() {
     deleteCategory,
   } = useStore();
 
-  if (!staffSession) return null;
+  if (!staffSession || staffSession.role !== 'admin') return null;
 
   return (
     <CategoryTreeManager

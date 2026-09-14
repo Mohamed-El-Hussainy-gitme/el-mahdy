@@ -16,10 +16,14 @@ export default function AdminLoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // If already logged in, redirect directly to /admin
+  // If already logged in, redirect to role-specific landing page
   useEffect(() => {
     if (staffSession) {
-      router.push('/admin');
+      if (staffSession.role === 'warehouse_preparer' || (staffSession.role as string) === 'warehouse') {
+        router.push('/admin/orders');
+      } else {
+        router.push('/admin');
+      }
     }
   }, [staffSession, router]);
 
@@ -30,7 +34,11 @@ export default function AdminLoginPage() {
 
     const res = await staffLogin(email, password);
     if (res.success) {
-      router.push('/admin');
+      if (res.role === 'warehouse_preparer' || (res.role as string) === 'warehouse') {
+        router.push('/admin/orders');
+      } else {
+        router.push('/admin');
+      }
     } else {
       setErrorMsg(res.message || 'فشل تسجيل الدخول');
       setIsLoading(false);

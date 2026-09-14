@@ -102,7 +102,15 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
     setIsSubmitting(true);
     setFeedback(null);
 
-    const cleanEmail = addEmail.trim() || `${addPhone.trim().replace(/\s/g, '')}@elmahdy.com`;
+    const cleanEmail = addEmail.trim().toLowerCase();
+    if (cleanEmail === 'admin@elmahdy.com') {
+      setFeedback({
+        type: 'error',
+        message: 'لا يمكن استخدام بريد مدير النظام الرئيسي (admin@elmahdy.com) لإنشاء موظف جديد.',
+      });
+      return;
+    }
+    const finalEmail = cleanEmail || `${addPhone.trim().replace(/\s/g, '')}@elmahdy.com`;
 
     try {
       const token = await getAuthToken();
@@ -120,7 +128,7 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
         },
         body: JSON.stringify({
           fullName: addFullName.trim(),
-          email: cleanEmail,
+          email: finalEmail,
           phone: addPhone.trim(),
           role: addRole,
           password: addPassword,
@@ -486,7 +494,7 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
                 {feedback.message}
               </div>
             )}
-            <form onSubmit={handleCreateStaff} className="space-y-3.5 text-xs">
+            <form onSubmit={handleCreateStaff} autoComplete="off" className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-700 font-bold mb-1">الاسم بالكامل *</label>
                 <input
@@ -510,15 +518,21 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-bold mb-1">البريد الإلكتروني (اختياري)</label>
+                <label className="block text-slate-700 font-bold mb-1">
+                  البريد الإلكتروني <span className="font-normal text-slate-400">(اختياري)</span>
+                </label>
                 <input
                   type="email"
+                  name="staff_new_email_no_autofill"
+                  autoComplete="new-password"
                   value={addEmail}
                   onChange={(e) => setAddEmail(e.target.value)}
-                  placeholder="name@elmahdy.com"
+                  placeholder="اتركه فارغاً ليُنشأ تلقائياً برقم الهاتف"
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-[#0099DD]"
                 />
-                <p className="text-slate-400 mt-0.5">إذا تُرك فارغاً: هاتف@elmahdy.com</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  إذا تُرك فارغاً: سيتم توليد البريد تلقائياً (رقم_الهاتف@elmahdy.com). لا تستخدم بريد المدير العام (admin@elmahdy.com).
+                </p>
               </div>
               <div>
                 <label className="block text-slate-700 font-bold mb-1">الدور والصلاحية *</label>

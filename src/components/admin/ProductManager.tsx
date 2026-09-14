@@ -315,9 +315,17 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
           )}
 
           {!isAdmin && (
-            <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-2 rounded-xl text-xs font-semibold border border-amber-200 whitespace-nowrap">
-              <ShieldAlert className="w-4 h-4" />
-              <span>عرض فقط</span>
+            <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap ${
+              currentRole === 'sales_agent'
+                ? 'bg-sky-50 text-sky-700 border-sky-200'
+                : 'bg-amber-50 text-amber-800 border-amber-200'
+            }`}>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>
+                {currentRole === 'sales_agent'
+                  ? 'كتالوج المنتجات والأسعار المعتمدة'
+                  : 'دليل الأصناف للتجهيز والمطابقة'}
+              </span>
             </div>
           )}
         </div>
@@ -332,7 +340,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                 <th className="p-3.5">المنتج</th>
                 <th className="p-3.5">كود SKU</th>
                 <th className="p-3.5">سعر البيع (ج.م)</th>
-                <th className="p-3.5">التكلفة والهامش</th>
+                {isAdmin && <th className="p-3.5">التكلفة والهامش</th>}
                 <th className="p-3.5">التصنيفات المربوطة</th>
                 <th className="p-3.5">مصفوفة التوافق</th>
                 <th className="p-3.5">الحالة والخصائص</th>
@@ -342,7 +350,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-400">
+                  <td colSpan={isAdmin ? 8 : 6} className="text-center py-12 text-slate-400">
                     لا توجد منتجات مطابقة لعملية البحث.
                   </td>
                 </tr>
@@ -381,17 +389,19 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                         {p.price.toFixed(2)} ج.م
                       </td>
 
-                      {/* Cost Price & Margin */}
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-mono text-slate-700 font-bold text-xs">
-                          {p.cost_price ? `${p.cost_price.toFixed(2)} ج.م` : '-'}
-                        </div>
-                        {p.cost_price && p.price > 0 ? (
-                          <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
-                            هامش: {(((p.price - p.cost_price) / p.price) * 100).toFixed(0)}%
+                      {/* Cost Price & Margin (Admin Only) */}
+                      {isAdmin && (
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="font-mono text-slate-700 font-bold text-xs">
+                            {p.cost_price ? `${p.cost_price.toFixed(2)} ج.م` : '-'}
                           </div>
-                        ) : null}
-                      </td>
+                          {p.cost_price && p.price > 0 ? (
+                            <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                              هامش: {(((p.price - p.cost_price) / p.price) * 100).toFixed(0)}%
+                            </div>
+                          ) : null}
+                        </td>
+                      )}
 
                       {/* Categories chips */}
                       <td className="p-3.5">

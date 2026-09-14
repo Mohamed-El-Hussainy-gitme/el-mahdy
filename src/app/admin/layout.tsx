@@ -18,13 +18,29 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { canViewDashboard } from '@/services/authService';
+import { canViewDashboard, canAccessAdminRoute, getDefaultAdminRoute } from '@/services/authService';
+import { filterOrdersForRole } from '@/services/orderService';
 import { StaffHeader } from '@/components/admin/StaffHeader';
+import { UserRole } from '@/types';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { staffSession, staffLogout, orders, products, categories, shortages, isLoading } = useStore();
+
+  const userRole = (staffSession?.role as string) === 'warehouse'
+    ? 'warehouse_preparer'
+    : (staffSession?.role as UserRole);
+
+  // Dynamic route security guard: smoothly redirect users if they navigate to an unauthorized path
+  React.useEffect(() => {
+    if (staffSession && pathname && !pathname.startsWith('/admin/login')) {
+      if (!canAccessAdminRoute(userRole, pathname)) {
+        const fallback = getDefaultAdminRoute(userRole);
+        router.replace(fallback);
+      }
+    }
+  }, [staffSession, userRole, pathname, router]);
 
   // If login page, don't show admin chrome
   if (pathname.startsWith('/admin/login')) {
@@ -76,19 +92,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  const navItems = [
-    { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
-    { href: '/admin/orders', label: 'الطلبات ودورة الحياة', icon: Truck, count: orders.length },
-    { href: '/admin/products', label: 'المنتجات والكتالوج', icon: Package, count: products.length },
-    { href: '/admin/categories', label: 'شجرة التصنيفات', icon: FolderTree, count: categories.length },
-    { href: '/admin/matrix', label: 'مصفوفة التوافق', icon: Boxes },
-    { href: '/admin/shortages', label: 'تنبيهات النواقص', icon: AlertTriangle, count: shortages.length },
-    { href: '/admin/customers', label: 'العملاء والمناديب', icon: Users },
-    ...(staffSession.role === 'admin'
-      ? [{ href: '/admin/staff', label: 'الموظفون والصلاحيات', icon: Shield }]
-      : []),
-    { href: '/admin/settings', label: 'إعدادات المتجر', icon: Settings },
-  ];
+  // Calculate orders accessible to this specific role
+  const roleAccessibleOrders = filterOrdersForRole(orders, staffSession);
+
+  // Tailor navigation items specifically for each role
+  const navItems = (() => {
+    if (userRole === 'admin') {
+      return [
+        { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
+        { href: '/admin/orders', label: 'الطلبات ودورة الحياة', icon: Truck, count: orders.length },
+        { href: '/admin/products', label: 'المنتجات والكتالوج', icon: Package, count: products.length },
+        { href: '/admin/categories', label: 'شجرة التصنيفات', icon: FolderTree, count: categories.length },
+        { href: '/admin/matrix', label: 'مصفوفة التوافق', icon: Boxes },
+        { href: '/admin/shortages', label: 'تنبيهات النواقص', icon: AlertTriangle, count: shortages.length },
+        { href: '/admin/customers', label: 'العملاء والمناديب', icon: Users },
+        { href: '/admin/staff', label: 'الموظفون والصلاحيات', icon: Shield },
+        { href: '/admin/settings', label: 'إعدادات المتجر', icon: Settings },
+      ];
+    }
+
+    if (userRole === 'sales_agent') {
+      return [
+        { href: '/admin', label: 'نظرة عامة (المبيعات)', icon: LayoutDashboard },
+        { href: '/admin/orders', label: 'طلبات عملائي', icon: Truck, count: roleAccessibleOrders.length },
+        { href: '/admin/customers', label: 'عملائي المعتمدون', icon: Users },
+        { href: '/admin/products', label: 'الكتالوج والأسعار', icon: Package, count: products.length },
+        { href: '/admin/matrix', label: 'مصفوفة التوافق والموديلات', icon: Boxes },
+        { href: '/admin/shortages', label: 'تنبيهات النواقص', icon: AlertTriangle, count: shortages.length },
+      ];
+    }
+
+    if (userRole === 'warehouse_preparer') {
+      return [
+        { href: '/admin/orders', label: 'طلبات التجهيز والشحن', icon: Truck, count: roleAccessibleOrders.length },
+        { href: '/admin/matrix', label: 'مصفوفة التوافق والمخزون', icon: Boxes },
+        { href: '/admin/products', label: 'كتالوج الأصناف للتجهيز', icon: Package, count: products.length },
+      ];
+    }
+
+    return [];
+  })();
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-900" dir="rtl">

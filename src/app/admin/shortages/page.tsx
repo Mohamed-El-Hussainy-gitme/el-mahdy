@@ -7,7 +7,7 @@ import { ShortagesManager } from '@/components/admin/ShortagesManager';
 export default function AdminShortagesPage() {
   const { shortages, staffSession, updateShortageStatus } = useStore();
 
-  if (!staffSession) return null;
+  if (!staffSession || (staffSession.role !== 'admin' && staffSession.role !== 'sales_agent')) return null;
 
   return (
     <ShortagesManager

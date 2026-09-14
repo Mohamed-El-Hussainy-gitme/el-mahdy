@@ -95,6 +95,34 @@ export async function POST(request: NextRequest) {
     const cleanEmail = (email?.trim() || `${cleanPhone}@elmahdy.com`).toLowerCase();
     const cleanName = fullName.trim();
 
+    // Guard: Prevent hijacking or creating staff using admin@elmahdy.com
+    if (cleanEmail === 'admin@elmahdy.com') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'لا يمكن استخدام أو تكرار البريد الخاص بحساب مدير النظام الرئيسي (admin@elmahdy.com). يرجى استخدام بريد أو رقم هاتف آخر.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if email or phone is already used in user_profiles
+    const { data: existingProfile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id, email, phone, full_name, role')
+      .or(`email.eq.${cleanEmail},phone.eq.${cleanPhone}`)
+      .maybeSingle();
+
+    if (existingProfile) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `البيانات مسجلة بالفعل للموظف (${existingProfile.full_name}) بريد: ${existingProfile.email}. يرجى استخدام بريد إلكتروني أو هاتف مختلف، أو تعديل حسابه القائم من جدول الموظفين.`,
+        },
+        { status: 400 }
+      );
+    }
+
     // 1. Create auth user in Supabase
     let authUserId: string | null = null;
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -109,48 +137,36 @@ export async function POST(request: NextRequest) {
     });
 
     if (authError) {
-      if (
-        authError.message.toLowerCase().includes('already been registered') ||
-        authError.message.toLowerCase().includes('already exists')
-      ) {
-        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-        const existingAuth = existingUsers?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
-        if (existingAuth) {
-          authUserId = existingAuth.id;
-          // Update password and metadata for existing auth
-          await supabaseAdmin.auth.admin.updateUserById(authUserId, {
-            password: password,
-            email_confirm: true,
-            user_metadata: { full_name: cleanName, phone: cleanPhone, role: normalizedRole },
-          });
-        } else {
-          return NextResponse.json({ success: false, error: `البريد الإلكتروني مسجل بالفعل: ${authError.message}` }, { status: 400 });
-        }
-      } else {
-        return NextResponse.json({ success: false, error: `فشل إنشاء حساب الموظف: ${authError.message}` }, { status: 400 });
-      }
-    } else {
-      authUserId = authData.user?.id || null;
+      return NextResponse.json(
+        {
+          success: false,
+          error: `فشل إنشاء حساب الموظف: ${authError.message}. إذا كان البريد مستخدماً مسبقاً، يرجى كتابة بريد آخر.`,
+        },
+        { status: 400 }
+      );
     }
 
-    // 2. Upsert profile in user_profiles
+    authUserId = authData.user?.id || null;
+
+    // 2. Insert profile in user_profiles
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
-      .upsert(
-        {
-          auth_user_id: authUserId,
-          full_name: cleanName,
-          email: cleanEmail,
-          phone: cleanPhone,
-          role: normalizedRole,
-          is_active: true,
-        },
-        { onConflict: 'email' }
-      )
+      .insert({
+        auth_user_id: authUserId,
+        full_name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        role: normalizedRole,
+        is_active: true,
+      })
       .select()
       .single();
 
     if (profileError) {
+      // Rollback auth user if profile creation failed
+      if (authUserId) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      }
       return NextResponse.json(
         { success: false, error: `فشل حفظ ملف الموظف في قاعدة البيانات: ${profileError.message}` },
         { status: 500 }
@@ -205,6 +221,14 @@ export async function PATCH(request: NextRequest) {
     if (authCheck.callerProfile.id === id && role && role !== 'admin') {
       return NextResponse.json(
         { success: false, error: 'لا يمكنك تغيير دورك من مدير نظام (Admin) لمنع إغلاق لوحة التحكم على نفسك' },
+        { status: 400 }
+      );
+    }
+
+    // Explicit protection for primary admin account
+    if (targetProfile.email === 'admin@elmahdy.com' && role && role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'لا يمكن تغيير دور حساب مدير النظام الرئيسي (admin@elmahdy.com)' },
         { status: 400 }
       );
     }
