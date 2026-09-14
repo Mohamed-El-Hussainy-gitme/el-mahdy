@@ -148,29 +148,63 @@ export async function POST(request: NextRequest) {
 
     authUserId = authData.user?.id || null;
 
-    // 2. Insert profile in user_profiles
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('user_profiles')
-      .insert({
-        auth_user_id: authUserId,
-        full_name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone,
-        role: normalizedRole,
-        is_active: true,
-      })
-      .select()
-      .single();
+    // 2. Fetch profile (which may have already been auto-created by the DB trigger) or insert it
+    let profile: any = null;
 
-    if (profileError) {
-      // Rollback auth user if profile creation failed
-      if (authUserId) {
-        await supabaseAdmin.auth.admin.deleteUser(authUserId);
+    const { data: existingTriggerProfile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (existingTriggerProfile) {
+      // Update with exact values from the form to ensure complete consistency
+      const { data: updatedProfile, error: updateErr } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          full_name: cleanName,
+          phone: cleanPhone,
+          role: normalizedRole,
+          email: cleanEmail,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingTriggerProfile.id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        return NextResponse.json(
+          { success: false, error: `فشل استكمال بيانات الموظف: ${updateErr.message}` },
+          { status: 500 }
+        );
       }
-      return NextResponse.json(
-        { success: false, error: `فشل حفظ ملف الموظف في قاعدة البيانات: ${profileError.message}` },
-        { status: 500 }
-      );
+      profile = updatedProfile;
+    } else {
+      // If no trigger created it, insert profile cleanly
+      const { data: insertedProfile, error: insertErr } = await supabaseAdmin
+        .from('user_profiles')
+        .insert({
+          auth_user_id: authUserId,
+          full_name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          role: normalizedRole,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (insertErr) {
+        if (authUserId) {
+          await supabaseAdmin.auth.admin.deleteUser(authUserId);
+        }
+        return NextResponse.json(
+          { success: false, error: `فشل حفظ ملف الموظف في قاعدة البيانات: ${insertErr.message}` },
+          { status: 500 }
+        );
+      }
+      profile = insertedProfile;
     }
 
     return NextResponse.json({
