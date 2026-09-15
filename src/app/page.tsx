@@ -28,6 +28,8 @@ export default function StorefrontPage() {
     onlyFeatured,
   } = useStore();
 
+  const [sortBy, setSortBy] = React.useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
+
   // Active Category Object
   const currentCategory = useMemo(() => {
     return categories.find((c) => c.slug === selectedCategorySlug);
@@ -35,11 +37,11 @@ export default function StorefrontPage() {
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
+    const list = products.filter((p) => {
       // 1. Category filter
       if (selectedCategorySlug !== 'all-products') {
         const cat = categories.find((c) => c.slug === selectedCategorySlug);
-        if (cat && !p.category_ids.includes(cat.id)) {
+        if (cat && !p.category_ids?.includes(cat.id)) {
           return false;
         }
       }
@@ -77,6 +79,16 @@ export default function StorefrontPage() {
 
       return true;
     });
+
+    return list.sort((a, b) => {
+      if (sortBy === 'price-asc') return a.price - b.price;
+      if (sortBy === 'price-desc') return b.price - a.price;
+      if (sortBy === 'featured') {
+        if (a.is_featured && !b.is_featured) return -1;
+        if (!a.is_featured && b.is_featured) return 1;
+      }
+      return 0;
+    });
   }, [
     products,
     selectedCategorySlug,
@@ -85,6 +97,7 @@ export default function StorefrontPage() {
     selectedBrand,
     priceRange,
     onlyFeatured,
+    sortBy,
   ]);
 
   return (
@@ -114,9 +127,18 @@ export default function StorefrontPage() {
 
           <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-500 font-semibold hidden sm:inline">الترتيب حسب:</span>
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl font-bold text-slate-700">
-              <span>الأحدث والمميز</span>
-              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-200 pl-8 pr-3 py-1.5 rounded-xl font-bold text-slate-700 text-xs focus:outline-none focus:border-[#0099DD] cursor-pointer"
+              >
+                <option value="featured">الأحدث والمميز</option>
+                <option value="price-asc">السعر: من الأقل للأعلى</option>
+                <option value="price-desc">السعر: من الأعلى للأقل</option>
+                <option value="newest">كافة المنتجات</option>
+              </select>
+              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           </div>
         </div>

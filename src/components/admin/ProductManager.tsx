@@ -498,9 +498,10 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
 
       {/* Add / Edit Product Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header - Fixed */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50 shrink-0">
               <h3 className="font-extrabold text-slate-900 text-base">
                 {editingProduct ? 'تعديل بيانات المنتج' : 'إضافة منتج جديد للكتالوج'}
               </h3>
@@ -512,9 +513,11 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">كود المنتج (SKU) *</label>
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Modal Body - Scrollable */}
+              <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">كود المنتج (SKU) *</label>
                 <input
                   type="text"
                   value={sku}
@@ -680,23 +683,25 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                   ربط التصنيفات (يمكن اختيار أكثر من تصنيف رئيسي):
                 </label>
                 <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50 max-h-32 overflow-y-auto">
-                  {categories.map((cat) => {
-                    const isSelected = selectedCategoryIds.includes(cat.id);
-                    return (
-                      <button
-                        type="button"
-                        key={cat.id}
-                        onClick={() => handleToggleCategory(cat.id)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                          isSelected
-                            ? 'bg-[#0099DD] text-white shadow-sm'
-                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {cat.name_ar}
-                      </button>
-                    );
-                  })}
+                  {categories
+                    .filter((cat) => cat.slug !== 'all-products')
+                    .map((cat) => {
+                      const isSelected = selectedCategoryIds.includes(cat.id);
+                      return (
+                        <button
+                          type="button"
+                          key={cat.id}
+                          onClick={() => handleToggleCategory(cat.id)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                            isSelected
+                              ? 'bg-[#0099DD] text-white shadow-sm'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {cat.name_ar}
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
 
@@ -732,27 +737,29 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                   <span className="font-bold text-slate-700">منتج مميز</span>
                 </label>
               </div>
+            </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="flex items-center gap-1.5 bg-[#0099DD] hover:bg-[#007BB3] text-white px-5 py-2 rounded-xl font-bold shadow-sm transition"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>حفظ المنتج</span>
-                </button>
-              </div>
-            </form>
-          </div>
+            {/* Modal Footer - Fixed */}
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-slate-200 bg-slate-50 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-200 transition text-xs"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 bg-[#0099DD] hover:bg-[#007BB3] text-white px-5 py-2 rounded-xl font-bold shadow-sm transition text-xs"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>حفظ المنتج</span>
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </div>
+    )}
     </div>
   );
 };

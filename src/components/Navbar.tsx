@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Search,
   ShoppingCart,
@@ -69,32 +70,44 @@ export default function Navbar() {
       )}`;
 
 
-  // Quick categories for top bar (matching yasbas layout)
-  const topBarQuickLinks: Array<{ name: string; slug: string; brand?: string }> = [
-    { name: 'الرئيسية', slug: 'all-products' },
-    { name: 'تشكيل سكرينات فري', slug: 'screen-protectors' },
-    { name: 'سكرين كيرف وفلاكشيب', slug: 'screen-protectors' },
-    { name: 'سكرينات ايفون', slug: 'screen-protectors', brand: 'IPHONE' },
-    { name: 'سكرينات تابلت', slug: 'screen-protectors' },
-    { name: 'تشكيل بطاريات', slug: 'phone-batteries' },
-    { name: 'منتجات الكهرباء', slug: 'chargers-adapters' },
-    { name: 'حماية كاميرات', slug: 'screen-protectors' },
-    { name: 'هولدرات سيارات ومكاتب', slug: 'car-accessories' },
-    { name: 'حماية ساعة', slug: 'smart-watches' },
-    { name: 'شرايح وباندلز', slug: 'general-accessories' },
-    { name: 'لوازم في المحل', slug: 'general-accessories' },
-  ];
+  const router = useRouter();
+  const pathname = usePathname();
 
-  const handleQuickLinkClick = (item: { name: string; slug: string; brand?: string }) => {
-    setSelectedCategorySlug(item.slug);
-    if (item.brand) {
-      setSelectedBrand(item.brand);
+  const topCategories = React.useMemo(() => {
+    return categories
+      .filter((c) => c.slug !== 'all-products' && c.is_active !== false)
+      .slice(0, 8);
+  }, [categories]);
+
+  const handleCategoryNav = (slug: string) => {
+    setSelectedCategorySlug(slug);
+    setSelectedBrand(null);
+    if (pathname === '/') {
+      const el = document.getElementById('products-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
     } else {
-      setSelectedBrand(null);
+      router.push(`/catalogs/${slug}`);
     }
-    const el = document.getElementById('products-section');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleHomeNav = () => {
+    setSelectedCategorySlug('all-products');
+    setSelectedBrand(null);
+    setSearchQuery('');
+    if (pathname === '/') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      router.push('/');
+    }
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pathname !== '/') {
+      router.push(`/?search=${encodeURIComponent(searchQuery)}`);
+    } else {
+      const el = document.getElementById('products-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -144,26 +157,36 @@ export default function Navbar() {
             </a>
 
             {/* Horizontal Categories Scroll */}
-            <nav className="hidden lg:flex items-center gap-4 text-slate-300 whitespace-nowrap text-xs">
+            <nav className="hidden lg:flex items-center gap-3 text-slate-300 whitespace-nowrap text-xs">
+              <button
+                type="button"
+                onClick={handleHomeNav}
+                className={`hover:text-white transition-colors duration-150 ${
+                  pathname === '/' && selectedCategorySlug === 'all-products'
+                    ? 'text-[#38bdf8] font-black border-b border-[#38bdf8] pb-0.5'
+                    : ''
+                }`}
+              >
+                الرئيسية
+              </button>
               <Link
                 href="/catalogs"
                 className="text-[#38bdf8] hover:text-white font-bold transition flex items-center gap-1 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700 hover:border-[#0099DD]"
               >
                 <span>الكتالوجات</span>
               </Link>
-              {topBarQuickLinks.map((item, idx) => {
-                const isActive =
-                  selectedCategorySlug === item.slug &&
-                  (!item.brand || selectedBrand === item.brand);
+              {topCategories.map((cat) => {
+                const isActive = pathname === '/' && selectedCategorySlug === cat.slug;
                 return (
                   <button
-                    key={idx}
-                    onClick={() => handleQuickLinkClick(item)}
+                    key={cat.id}
+                    type="button"
+                    onClick={() => handleCategoryNav(cat.slug)}
                     className={`hover:text-white transition-colors duration-150 ${
-                      isActive ? 'text-[#38bdf8] font-bold border-b border-[#38bdf8]' : ''
+                      isActive ? 'text-[#38bdf8] font-bold border-b border-[#38bdf8] pb-0.5' : ''
                     }`}
                   >
-                    {item.name}
+                    {cat.name_ar}
                   </button>
                 );
               })}
@@ -274,10 +297,13 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
           
           {/* Search container */}
-          <div className="w-full max-w-4xl mx-auto flex items-center border-2 border-slate-200 hover:border-[#0099DD] focus-within:border-[#0099DD] rounded-full overflow-hidden transition-all shadow-sm bg-white">
-            
+          <form
+            onSubmit={handleSearchSubmit}
+            className="w-full max-w-4xl mx-auto flex items-center border-2 border-slate-200 hover:border-[#0099DD] focus-within:border-[#0099DD] rounded-full overflow-hidden transition-all shadow-sm bg-white"
+          >
             {/* Search Button on the left side (RTL) */}
             <button
+              type="submit"
               aria-label="بحث"
               className="bg-[#0099DD] hover:bg-[#007BB3] text-white px-5 py-2.5 flex items-center justify-center transition"
             >
@@ -319,6 +345,7 @@ export default function Navbar() {
                     <span className="text-xs">‹</span>
                   </Link>
                   <button
+                    type="button"
                     onClick={() => {
                       setSelectedCategorySlug('all-products');
                       setIsCatalogDropdownOpen(false);
@@ -326,29 +353,29 @@ export default function Navbar() {
                     className="w-full text-right px-4 py-2 text-xs hover:bg-sky-50 hover:text-[#0099DD] font-semibold flex items-center justify-between"
                   >
                     <span>كل المنتجات (الرئيسية)</span>
-                    <span className="text-[10px] text-slate-400">356</span>
                   </button>
                   <hr className="my-1 border-slate-100" />
-                  {categories.slice(1).map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => {
-                        setSelectedCategorySlug(cat.slug);
-                        setIsCatalogDropdownOpen(false);
-                      }}
-                      className={`w-full text-right px-4 py-2 text-xs hover:bg-sky-50 hover:text-[#0099DD] flex items-center justify-between transition ${
-                        selectedCategorySlug === cat.slug ? 'text-[#0099DD] font-bold bg-sky-50/60' : 'text-slate-700'
-                      }`}
-                    >
-                      <span className="truncate">{cat.name_ar}</span>
-                      <span className="text-[10px] text-slate-400">{cat.product_count}</span>
-                    </button>
-                  ))}
+                  {categories
+                    .filter((c) => c.slug !== 'all-products')
+                    .map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategorySlug(cat.slug);
+                          setIsCatalogDropdownOpen(false);
+                        }}
+                        className={`w-full text-right px-4 py-2 text-xs hover:bg-sky-50 hover:text-[#0099DD] flex items-center justify-between transition ${
+                          selectedCategorySlug === cat.slug ? 'text-[#0099DD] font-bold bg-sky-50/60' : 'text-slate-700'
+                        }`}
+                      >
+                        <span className="truncate">{cat.name_ar}</span>
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
-
-          </div>
+          </form>
 
         </div>
       </div>
@@ -371,23 +398,19 @@ export default function Navbar() {
           </div>
 
           {/* Quick Filters on Left */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setOnlyFeatured(!onlyFeatured)}
-              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border transition ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition ${
                 onlyFeatured
-                  ? 'bg-[#0099DD] text-white border-[#0099DD]'
+                  ? 'bg-[#0099DD] text-white border-[#0099DD] shadow-sm'
                   : 'bg-white text-slate-700 border-slate-300 hover:border-[#0099DD]'
               }`}
             >
-              <span>العروض فقط</span>
-              <Tag className="w-3 h-3" />
+              <span>المنتجات المميزة فقط</span>
+              <Tag className="w-3.5 h-3.5" />
             </button>
-
-            <div className="flex items-center gap-1.5 text-slate-600 font-semibold text-xs cursor-pointer hover:text-[#0099DD]">
-              <span>مميز</span>
-              <ArrowUpDown className="w-3.5 h-3.5" />
-            </div>
           </div>
 
         </div>

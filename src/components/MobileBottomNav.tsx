@@ -1,10 +1,14 @@
 'use client';
 
 import React from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { Home, Grid, Heart, ShoppingCart, User } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export default function MobileBottomNav() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const {
     selectedCategorySlug,
     setSelectedCategorySlug,
@@ -22,13 +26,18 @@ export default function MobileBottomNav() {
     setSelectedCategorySlug('all-products');
     setSelectedBrand(null);
     setSearchQuery('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (pathname === '/') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      router.push('/');
+    }
   };
 
   const handleCatalogsClick = () => {
-    const el = document.getElementById('catalog-showcase-section') || document.getElementById('products-section');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+    if (pathname === '/catalogs') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      router.push('/catalogs');
     }
   };
 
@@ -43,14 +52,14 @@ export default function MobileBottomNav() {
           type="button"
           onClick={handleHomeClick}
           className={`flex flex-col items-center justify-center py-1 transition-all ${
-            selectedCategorySlug === 'all-products'
+            pathname === '/' && selectedCategorySlug === 'all-products'
               ? 'text-[#0099DD] font-black'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           <div className="relative">
             <Home className="w-5 h-5 transition-transform active:scale-90" />
-            {selectedCategorySlug === 'all-products' && (
+            {pathname === '/' && selectedCategorySlug === 'all-products' && (
               <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#0099DD] rounded-full" />
             )}
           </div>
@@ -62,14 +71,14 @@ export default function MobileBottomNav() {
           type="button"
           onClick={handleCatalogsClick}
           className={`flex flex-col items-center justify-center py-1 transition-all ${
-            selectedCategorySlug !== 'all-products'
+            pathname.startsWith('/catalogs') || (pathname === '/' && selectedCategorySlug !== 'all-products')
               ? 'text-[#0099DD] font-black'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           <div className="relative">
             <Grid className="w-5 h-5 transition-transform active:scale-90" />
-            {selectedCategorySlug !== 'all-products' && (
+            {(pathname.startsWith('/catalogs') || (pathname === '/' && selectedCategorySlug !== 'all-products')) && (
               <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#0099DD] rounded-full" />
             )}
           </div>
