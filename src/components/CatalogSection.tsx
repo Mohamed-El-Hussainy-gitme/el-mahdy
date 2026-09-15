@@ -220,51 +220,57 @@ function CatalogSection() {
             const isSelected = selectedCategorySlug === banner.slug;
 
             return (
-              <div
+              <Link
                 key={idx}
-                onClick={() => handleSelectCatalog(banner.slug)}
-                className={`bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer group flex flex-col justify-between ${
+                href={`/catalogs/${banner.slug}`}
+                className={`relative rounded-2xl border overflow-hidden shadow-sm hover:shadow-lg transition group flex flex-col min-h-[200px] ${
                   isSelected ? 'border-[#0099DD] ring-2 ring-[#0099DD]/20' : 'border-slate-200 hover:border-[#0099DD]'
                 }`}
               >
-                <div className="p-4">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className={`${banner.badgeColor} text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm`}>
-                      {banner.badge}
-                    </span>
-                    {banner.count > 0 && (
-                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                        {banner.count} منتج متاح
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0099DD] transition">
-                    {banner.title}
-                  </h4>
-                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{banner.subtitle}</p>
-                </div>
-
-                <div className="relative h-28 w-full bg-slate-100 overflow-hidden border-t border-slate-100 flex items-center justify-center">
+                {/* Full-bleed background image or gradient fallback */}
+                <div className="absolute inset-0">
                   {banner.image ? (
                     <Image
                       src={banner.image}
                       alt={banner.title}
                       fill
-                      className="object-cover group-hover:scale-105 transition duration-300"
+                      className="object-cover group-hover:scale-105 transition duration-500"
                     />
                   ) : (
-                    <div className="flex flex-col items-center justify-center text-slate-400 group-hover:scale-105 transition duration-300">
+                    <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
                       {getCategoryIcon(banner.slug)}
-                      <span className="text-[10px] font-bold text-slate-500 mt-1">{banner.title}</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent flex items-end p-2.5">
-                    <span className="text-white text-[11px] font-bold flex items-center gap-1 group-hover:translate-x-1 transition">
+                  {/* Dark gradient overlay — top-to-bottom for readability */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/70" />
+                </div>
+
+                {/* Card content overlay */}
+                <div className="relative z-10 flex flex-col justify-between h-full p-4 min-h-[200px]">
+                  {/* Top: Badge + Count */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`${banner.badgeColor} text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow`}>
+                      {banner.badge}
+                    </span>
+                    {banner.count > 0 && (
+                      <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30">
+                        {banner.count} منتج
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Bottom: Title + subtitle + CTA */}
+                  <div>
+                    <h4 className="font-extrabold text-white text-sm leading-snug drop-shadow group-hover:text-[#7dd3fc] transition">
+                      {banner.title}
+                    </h4>
+                    <p className="text-[10px] text-white/70 mt-0.5 line-clamp-1">{banner.subtitle}</p>
+                    <span className="inline-flex items-center gap-1 mt-2 text-white text-[11px] font-bold group-hover:translate-x-1 transition">
                       تصفح الكتالوج <ArrowLeft className="w-3 h-3" />
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

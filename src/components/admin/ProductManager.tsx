@@ -601,7 +601,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[#0099DD] hover:bg-[#007BB3] text-white rounded-xl text-xs font-bold transition disabled:opacity-50 shrink-0"
                   >
                     {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                     <span>رفع صورة</span>
@@ -649,7 +649,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                     type="button"
                     onClick={() => galleryFileInputRef.current?.click()}
                     disabled={isUploadingGallery}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0099DD] hover:bg-[#007BB3] text-white rounded-xl text-xs font-bold transition disabled:opacity-50 shrink-0"
                   >
                     {isUploadingGallery ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                     <span>رفع صور</span>
