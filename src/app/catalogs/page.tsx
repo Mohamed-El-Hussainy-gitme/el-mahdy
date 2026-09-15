@@ -35,31 +35,10 @@ export default function CatalogsPage() {
     }
   };
 
-  const categoryImageMap: Record<string, string> = {
-    'screen-protectors': 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=300&auto=format&fit=crop&q=80',
-    'phone-cases': 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=300&auto=format&fit=crop&q=80',
-    'chargers-adapters': 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=300&auto=format&fit=crop&q=80',
-    'charging-cables': 'https://images.unsplash.com/photo-1588508065123-287b28e013da?w=300&auto=format&fit=crop&q=80',
-    'bluetooth-earbuds': 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=300&auto=format&fit=crop&q=80',
-    'speakers': 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=300&auto=format&fit=crop&q=80',
-    'smart-watches': 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=300&auto=format&fit=crop&q=80',
-    'watches': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=300&auto=format&fit=crop&q=80',
-    'car-accessories': 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?w=300&auto=format&fit=crop&q=80',
-    'power-banks': 'https://images.unsplash.com/photo-1609592426867-0c7f1a3068f6?w=300&auto=format&fit=crop&q=80',
-    'storage-memory': 'https://images.unsplash.com/photo-1628155930542-3c7a64e2c833?w=300&auto=format&fit=crop&q=80',
-    'phone-batteries': 'https://images.unsplash.com/photo-1619725002198-6a689b72f41d?w=300&auto=format&fit=crop&q=80',
-    'mobile-phones': 'https://images.unsplash.com/photo-1511707171634-5f897ff02560?w=300&auto=format&fit=crop&q=80',
-    'originals': 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=300&auto=format&fit=crop&q=80',
-    'computer-accessories': 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=300&auto=format&fit=crop&q=80',
-    'lighting-tripods': 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=300&auto=format&fit=crop&q=80',
-    'general-accessories': 'https://images.unsplash.com/photo-1572721546713-ff00e57588e7?w=300&auto=format&fit=crop&q=80',
-  };
-
   const getCategoryImageUrl = (cat: { id: string; slug: string; image_url?: string }) => {
-    if (cat.image_url) return cat.image_url;
-    const firstProd = products.find((p) => p.category_ids?.includes(cat.id) && p.image_url);
+    if (cat.image_url && cat.image_url.trim()) return cat.image_url;
+    const firstProd = products.find((p) => p.category_ids?.includes(cat.id) && p.image_url && p.image_url.trim());
     if (firstProd?.image_url) return firstProd.image_url;
-    if (categoryImageMap[cat.slug]) return categoryImageMap[cat.slug];
     return null;
   };
 

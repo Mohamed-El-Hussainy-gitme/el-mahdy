@@ -59,7 +59,7 @@ interface StoreContextType {
   // Categories & CRUD
   categories: Category[];
   categoriesTree: Category[];
-  addCategory: (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string }) => Promise<void>;
+  addCategory: (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string }) => Promise<void>;
   updateCategory: (id: string, cat: Partial<Category>) => Promise<void>;
   deleteCategory: (id: string) => Promise<{ success: boolean; message?: string }>;
   selectedCategorySlug: string;
@@ -113,10 +113,8 @@ interface StoreContextType {
   setSelectedBrand: (brand: string | null) => void;
   priceRange: [number, number];
   setPriceRange: (range: [number, number]) => void;
-  onlyDiscounts: boolean;
-  setOnlyDiscounts: (val: boolean) => void;
-  onlyFreeShipping: boolean;
-  setOnlyFreeShipping: (val: boolean) => void;
+  onlyFeatured: boolean;
+  setOnlyFeatured: (val: boolean) => void;
   clearFilters: () => void;
 
   // Cart
@@ -211,8 +209,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 7500]);
-  const [onlyDiscounts, setOnlyDiscounts] = useState<boolean>(false);
-  const [onlyFreeShipping, setOnlyFreeShipping] = useState<boolean>(false);
+  const [onlyFeatured, setOnlyFeatured] = useState<boolean>(false);
 
   // Modals
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
@@ -256,6 +253,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     working_hours: 'السبت - الخميس: 9:00 ص - 10:00 م',
     announcement: 'شحن فوري وتوصيل لكافة محافظات الجمهورية للمحلات والشركات مع إصدار بوليصة شحن وتتبع مباشر.',
     default_moq: 5,
+    delivery_promise_1: 'توصيل لكافة محافظات جمهورية مصر العربية للمحلات والشركات.',
+    delivery_promise_2: 'تجهيز وشحن الطلبات بالتنسيق مع المندوب المعتمد ومسؤولي المستودع.',
+    delivery_promise_3: 'إصدار بوليصة شحن ومتابعة حالة الطلب لكل بضاعة تجارية.',
   };
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(defaultSettings);
 
@@ -720,7 +720,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // ==========================================
   // Category Tree CRUD
   // ==========================================
-  const addCategory = async (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string }) => {
+  const addCategory = async (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string }) => {
     const newCatId = generateUUID();
     const newCat: Category = {
       id: newCatId,
@@ -728,6 +728,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       slug: cat.slug || 'cat-' + Date.now(),
       parent_id: cat.parent_id || null,
       icon: cat.icon || '',
+      image_url: cat.image_url || '',
       sort_order: categories.length + 1,
       is_active: true,
       product_count: 0,
@@ -742,6 +743,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           name_ar: newCat.name_ar,
           slug: newCat.slug,
           parent_id: newCat.parent_id,
+          icon: newCat.icon,
+          image_url: newCat.image_url || null,
           sort_order: newCat.sort_order,
           is_active: newCat.is_active,
         });
@@ -764,6 +767,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             ...(updated.name_ar && { name_ar: updated.name_ar }),
             ...(updated.slug && { slug: updated.slug }),
             ...(updated.parent_id !== undefined && { parent_id: updated.parent_id }),
+            ...(updated.icon !== undefined && { icon: updated.icon }),
+            ...(updated.image_url !== undefined && { image_url: updated.image_url || null }),
+            ...(updated.sort_order !== undefined && { sort_order: updated.sort_order }),
             ...(updated.is_active !== undefined && { is_active: updated.is_active }),
             updated_at: new Date().toISOString(),
           })
@@ -1365,8 +1371,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setSearchQuery('');
     setSelectedBrand(null);
     setPriceRange([0, 7500]);
-    setOnlyDiscounts(false);
-    setOnlyFreeShipping(false);
+    setOnlyFeatured(false);
   };
 
   // ==========================================
@@ -2135,10 +2140,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setSelectedBrand,
         priceRange,
         setPriceRange,
-        onlyDiscounts,
-        setOnlyDiscounts,
-        onlyFreeShipping,
-        setOnlyFreeShipping,
+        onlyFeatured,
+        setOnlyFeatured,
         clearFilters,
 
         cart,

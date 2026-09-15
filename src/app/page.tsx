@@ -25,8 +25,7 @@ export default function StorefrontPage() {
     searchQuery,
     selectedBrand,
     priceRange,
-    onlyDiscounts,
-    onlyFreeShipping,
+    onlyFeatured,
   } = useStore();
 
   // Active Category Object
@@ -71,8 +70,8 @@ export default function StorefrontPage() {
         return false;
       }
 
-      // 5. Only discounts filter
-      if (onlyDiscounts && !p.is_featured) {
+      // 5. Only featured filter
+      if (onlyFeatured && !p.is_featured) {
         return false;
       }
 
@@ -85,7 +84,7 @@ export default function StorefrontPage() {
     searchQuery,
     selectedBrand,
     priceRange,
-    onlyDiscounts,
+    onlyFeatured,
   ]);
 
   return (

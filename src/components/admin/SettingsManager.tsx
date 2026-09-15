@@ -15,6 +15,7 @@ import {
   RefreshCw,
   MapPin,
   Clock,
+  Truck,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -264,6 +265,52 @@ export function SettingsManager({ currentRole }: SettingsManagerProps) {
                   <span className="text-[10px] text-slate-400 mt-1 block">
                     يستخدم كقيمة افتراضية عند إضافة منتجات جديدة أو عند عدم تحديد كمية مخصصة.
                   </span>
+                </div>
+              </div>
+            </div>
+
+            {/* B2B Delivery Promises Card */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2 border-b pb-3">
+                <Truck className="w-4 h-4 text-[#0099DD]" />
+                <span>وعود الشحن والتوصيل (B2B Delivery Promises في الهيدر)</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                هذه النصوص تظهر للعملاء في نافذة الشحن والتسليم أعلى المتجر. يمكنك تخصيصها لتطابق واقع التشغيل الفعلي.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">وعد التوصيل الأول (نطاق الخدمة)</label>
+                  <input
+                    type="text"
+                    name="delivery_promise_1"
+                    value={formState.delivery_promise_1 || ''}
+                    onChange={handleChange}
+                    placeholder="توصيل لكافة محافظات جمهورية مصر العربية للمحلات والشركات."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0099DD] text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">وعد التوصيل الثاني (آلية التجهيز والشحن)</label>
+                  <input
+                    type="text"
+                    name="delivery_promise_2"
+                    value={formState.delivery_promise_2 || ''}
+                    onChange={handleChange}
+                    placeholder="تجهيز وشحن الطلبات بالتنسيق مع المندوب المعتمد ومسؤولي المستودع."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0099DD] text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">وعد التوصيل الثالث (البوليصة والمتابعة)</label>
+                  <input
+                    type="text"
+                    name="delivery_promise_3"
+                    value={formState.delivery_promise_3 || ''}
+                    onChange={handleChange}
+                    placeholder="إصدار بوليصة شحن ومتابعة حالة الطلب لكل بضاعة تجارية."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#0099DD] text-xs"
+                  />
                 </div>
               </div>
             </div>

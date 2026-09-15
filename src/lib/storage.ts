@@ -1,10 +1,10 @@
-﻿import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 /**
  * Uploads an image file to Supabase Storage bucket ('product-images').
  * Returns the public URL of the uploaded image.
  */
-export async function uploadProductImage(file: File, folder: string = 'products'): Promise<{ url: string | null; error: string | null }> {
+export async function uploadImage(file: File, folder: string = 'general'): Promise<{ url: string | null; error: string | null }> {
   if (!isSupabaseConfigured()) {
     // If Supabase is not configured, create a local object URL for preview
     return { url: URL.createObjectURL(file), error: null };
@@ -22,7 +22,6 @@ export async function uploadProductImage(file: File, folder: string = 'products'
       });
 
     if (uploadError) {
-      // If bucket does not exist, return clear message
       console.warn('Storage upload error:', uploadError.message);
       return { url: null, error: uploadError.message };
     }
@@ -34,3 +33,11 @@ export async function uploadProductImage(file: File, folder: string = 'products'
     return { url: null, error: message };
   }
 }
+
+/**
+ * Backward compatibility alias for uploading product or folder images.
+ */
+export async function uploadProductImage(file: File, folder: string = 'products'): Promise<{ url: string | null; error: string | null }> {
+  return uploadImage(file, folder);
+}
+

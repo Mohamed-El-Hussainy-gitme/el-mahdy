@@ -147,7 +147,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Navigation Tabs Bar */}
-        <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-2">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =

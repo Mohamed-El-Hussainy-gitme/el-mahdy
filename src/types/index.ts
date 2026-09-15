@@ -5,6 +5,7 @@ export interface Category {
   name_ar: string;
   slug: string;
   icon?: string;
+  image_url?: string;
   parent_id?: string | null;
   sort_order: number;
   is_active: boolean;
@@ -172,6 +173,9 @@ export interface StoreSettings {
   working_hours: string;
   announcement: string;
   default_moq: number;
+  delivery_promise_1?: string;
+  delivery_promise_2?: string;
+  delivery_promise_3?: string;
   updated_at?: string;
 }
 

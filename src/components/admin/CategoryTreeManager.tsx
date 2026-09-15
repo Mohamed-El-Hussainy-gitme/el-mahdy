@@ -26,10 +26,14 @@ import {
   Wrench,
   Shield,
   Check,
+  Upload,
+  Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
 import { Category, Product, UserRole } from '@/types';
 import { validateCategoryDeletion } from '@/services/categoryService';
 import { canManageCategories } from '@/services/authService';
+import { uploadImage } from '@/lib/storage';
 
 const AVAILABLE_ICONS = [
   'Folder',
@@ -97,8 +101,11 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
   const [slug, setSlug] = useState('');
   const [parentId, setParentId] = useState<string | null>(null);
   const [icon, setIcon] = useState('Folder');
+  const [imageUrl, setImageUrl] = useState('');
   const [sortOrder, setSortOrder] = useState<number>(1);
+  const [isUploading, setIsUploading] = useState(false);
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const isAdmin = canManageCategories(currentRole);
 
@@ -113,6 +120,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
       setSlug(cat.slug);
       setParentId(cat.parent_id || null);
       setIcon(cat.icon || 'Folder');
+      setImageUrl(cat.image_url || '');
       setSortOrder(cat.sort_order || 1);
     } else {
       setEditingCategory(null);
@@ -120,9 +128,23 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
       setSlug('');
       setParentId(defaultParentId || null);
       setIcon('Folder');
+      setImageUrl('');
       setSortOrder(categories.length + 1);
     }
     setIsModalOpen(true);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    const res = await uploadImage(file, 'categories');
+    setIsUploading(false);
+    if (res.url) {
+      setImageUrl(res.url);
+    } else {
+      alert('فشل رفع صورة التصنيف: ' + (res.error || 'خطأ غير معروف'));
+    }
   };
 
   const handleMove = (cat: Category, direction: 'up' | 'down') => {
@@ -143,6 +165,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
         slug: finalSlug,
         parent_id: parentId,
         icon: icon,
+        image_url: imageUrl.trim() || undefined,
         sort_order: Number(sortOrder) || 1,
       });
     } else {
@@ -151,6 +174,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
         slug: finalSlug,
         parent_id: parentId,
         icon: icon,
+        image_url: imageUrl.trim() || undefined,
         sort_order: Number(sortOrder) || categories.length + 1,
         is_active: true,
       });
@@ -208,10 +232,16 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
               </div>
             )}
 
-            {/* Category Icon */}
-            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-              {renderCategoryIcon(node.icon)}
-            </div>
+            {/* Category Icon or Uploaded Image */}
+            {node.image_url ? (
+              <div className="w-7 h-7 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100">
+                <img src={node.image_url} alt={node.name_ar} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                {renderCategoryIcon(node.icon)}
+              </div>
+            )}
 
             <span className="text-sm">{node.name_ar}</span>
 
@@ -402,6 +432,62 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
                       {renderCategoryIcon(ic)}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Category Image Upload */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">صورة التصنيف الفعلية (Category Image)</label>
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  {imageUrl ? (
+                    <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-300 bg-white shrink-0 shadow-sm">
+                      <img src={imageUrl} alt="معاينة" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setImageUrl('')}
+                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center text-[10px] shadow hover:bg-red-700 transition"
+                        title="إزالة الصورة"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 bg-white shrink-0">
+                      <ImageIcon className="w-5 h-5 text-slate-300" />
+                      <span className="text-[9px] mt-0.5">بدون صورة</span>
+                    </div>
+                  )}
+
+                  <div className="flex-1 space-y-1">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition disabled:opacity-50"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0099DD]" />
+                          <span>جاري الرفع...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5 text-[#0099DD]" />
+                          <span>{imageUrl ? 'تغيير صورة التصنيف' : 'رفع صورة للتصنيف'}</span>
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-slate-400">
+                      تظهر كصورة دائرية أو كارت للكتالوج بالواجهة وصفحة الكتالوجات (مستحسن: 600×600).
+                    </p>
+                  </div>
                 </div>
               </div>
 

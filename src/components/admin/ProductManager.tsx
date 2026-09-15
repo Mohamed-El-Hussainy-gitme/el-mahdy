@@ -103,7 +103,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
       setDescAr('');
       setPrice(100);
       setCostPrice(70);
-      setImageUrl('https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=600');
+      setImageUrl('');
       setGalleryUrls([]);
       setIsExchangeOnly(false);
       setIsFeatured(false);
@@ -193,7 +193,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
             title_ar: pTitle,
             price: pPrice,
             cost_price: pCost,
-            image_url: 'https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=600',
+            image_url: '',
             is_exchange_only: false,
             is_featured: false,
             has_compatibility_matrix: true,

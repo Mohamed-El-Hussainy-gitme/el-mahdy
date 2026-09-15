@@ -70,70 +70,45 @@ function CatalogSection() {
     }
   };
 
-  // Curated representative images for categories matching wholesale catalog appearance
-  const categoryImageMap: Record<string, string> = {
-    'screen-protectors': 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=300&auto=format&fit=crop&q=80',
-    'phone-cases': 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=300&auto=format&fit=crop&q=80',
-    'chargers-adapters': 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=300&auto=format&fit=crop&q=80',
-    'charging-cables': 'https://images.unsplash.com/photo-1588508065123-287b28e013da?w=300&auto=format&fit=crop&q=80',
-    'bluetooth-earbuds': 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=300&auto=format&fit=crop&q=80',
-    'speakers': 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=300&auto=format&fit=crop&q=80',
-    'smart-watches': 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=300&auto=format&fit=crop&q=80',
-    'watches': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=300&auto=format&fit=crop&q=80',
-    'car-accessories': 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?w=300&auto=format&fit=crop&q=80',
-    'power-banks': 'https://images.unsplash.com/photo-1609592426867-0c7f1a3068f6?w=300&auto=format&fit=crop&q=80',
-    'storage-memory': 'https://images.unsplash.com/photo-1628155930542-3c7a64e2c833?w=300&auto=format&fit=crop&q=80',
-    'phone-batteries': 'https://images.unsplash.com/photo-1619725002198-6a689b72f41d?w=300&auto=format&fit=crop&q=80',
-    'mobile-phones': 'https://images.unsplash.com/photo-1511707171634-5f897ff02560?w=300&auto=format&fit=crop&q=80',
-    'originals': 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=300&auto=format&fit=crop&q=80',
-    'computer-accessories': 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=300&auto=format&fit=crop&q=80',
-    'lighting-tripods': 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=300&auto=format&fit=crop&q=80',
-    'general-accessories': 'https://images.unsplash.com/photo-1572721546713-ff00e57588e7?w=300&auto=format&fit=crop&q=80',
-  };
-
   const getCategoryImageUrl = (cat: { id: string; slug: string; image_url?: string }) => {
-    if (cat.image_url) return cat.image_url;
-    const firstProd = products.find((p) => p.category_ids?.includes(cat.id) && p.image_url);
+    if (cat.image_url && cat.image_url.trim()) return cat.image_url;
+    const firstProd = products.find((p) => p.category_ids?.includes(cat.id) && p.image_url && p.image_url.trim());
     if (firstProd?.image_url) return firstProd.image_url;
-    if (categoryImageMap[cat.slug]) return categoryImageMap[cat.slug];
     return null;
   };
 
-  // Curated showcase banners with DISTINCT slugs and descriptions
-  const showcaseBanners = [
-    {
-      title: 'حماية الشاشات والزجاج المقوى',
-      subtitle: 'حماية شاملة ضد الصدمات لجميع الموديلات',
-      slug: 'screen-protectors',
-      image: 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=600&auto=format&fit=crop&q=80',
-      badge: 'الأكثر طلباً',
-      badgeColor: 'bg-[#0099DD]',
-    },
-    {
-      title: 'الشواحن الأصلية والكابلات السريعة',
-      subtitle: 'محولات PD وكابلات معتمدة للشحن فائق السرعة',
-      slug: 'chargers-adapters',
-      image: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=600&auto=format&fit=crop&q=80',
-      badge: 'جملة معتمدة',
-      badgeColor: 'bg-amber-600',
-    },
-    {
-      title: 'جرابات وكفرات الحماية الفاخرة',
-      subtitle: 'خامات مقاومة للصدمات بحواف مرتفعة وحماية للكاميرا',
-      slug: 'phone-cases',
-      image: 'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=600&auto=format&fit=crop&q=80',
-      badge: 'تشكيلة متنوعة',
-      badgeColor: 'bg-indigo-600',
-    },
-    {
-      title: 'سماعات البلوتوث والإيربودز',
-      subtitle: 'صوت محيطي نقي وعزل ضوضاء بجودة استيراد أصلية',
-      slug: 'bluetooth-earbuds',
-      image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600&auto=format&fit=crop&q=80',
-      badge: 'أحدث الموديلات',
-      badgeColor: 'bg-emerald-600',
-    },
-  ];
+  // Dynamic Showcase Banners based on top categories that have products
+  const showcaseBanners = React.useMemo(() => {
+    const validCats = categories.filter((c) => c.slug !== 'all-products');
+    const sorted = [...validCats].sort((a, b) => {
+      const countA = products.filter((p) => p.category_ids?.includes(a.id)).length;
+      const countB = products.filter((p) => p.category_ids?.includes(b.id)).length;
+      if (countB !== countA) return countB - countA;
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+
+    const top4 = sorted.slice(0, 4);
+    const badges = [
+      { text: 'الأكثر طلباً', color: 'bg-[#0099DD]' },
+      { text: 'جملة معتمدة', color: 'bg-amber-600' },
+      { text: 'تشكيلة مميزة', color: 'bg-indigo-600' },
+      { text: 'أحدث الأصناف', color: 'bg-emerald-600' },
+    ];
+
+    return top4.map((cat, idx) => {
+      const count = products.filter((p) => p.category_ids?.includes(cat.id)).length;
+      const img = getCategoryImageUrl(cat);
+      return {
+        title: cat.name_ar,
+        subtitle: `تشكيلة وتوريدات مباشرة لقطاع الجملة (${count} صنف مسجل)`,
+        slug: cat.slug,
+        image: img || null,
+        badge: badges[idx]?.text || 'تشكيلة مميزة',
+        badgeColor: badges[idx]?.color || 'bg-[#0099DD]',
+        count,
+      };
+    });
+  }, [categories, products]);
 
   // Hot deals from products
   const hotDeals = products.filter((p) => p.is_featured);
@@ -238,55 +213,62 @@ function CatalogSection() {
         </div>
       </div>
 
-      {/* 2. Banner Cards 4-Column Showcase (Each with distinct category slug) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {showcaseBanners.map((banner, idx) => {
-          const cat = categories.find((c) => c.slug === banner.slug);
-          const count = cat ? products.filter((p) => p.category_ids?.includes(cat.id)).length : 0;
-          const isSelected = selectedCategorySlug === banner.slug;
+      {/* 2. Banner Cards 4-Column Showcase (Dynamic from top categories) */}
+      {showcaseBanners.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {showcaseBanners.map((banner, idx) => {
+            const isSelected = selectedCategorySlug === banner.slug;
 
-          return (
-            <div
-              key={idx}
-              onClick={() => handleSelectCatalog(banner.slug)}
-              className={`bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer group flex flex-col justify-between ${
-                isSelected ? 'border-[#0099DD] ring-2 ring-[#0099DD]/20' : 'border-slate-200 hover:border-[#0099DD]'
-              }`}
-            >
-              <div className="p-4">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className={`${banner.badgeColor} text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm`}>
-                    {banner.badge}
-                  </span>
-                  {count > 0 && (
-                    <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                      {count} منتج متاح
+            return (
+              <div
+                key={idx}
+                onClick={() => handleSelectCatalog(banner.slug)}
+                className={`bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer group flex flex-col justify-between ${
+                  isSelected ? 'border-[#0099DD] ring-2 ring-[#0099DD]/20' : 'border-slate-200 hover:border-[#0099DD]'
+                }`}
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className={`${banner.badgeColor} text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm`}>
+                      {banner.badge}
                     </span>
-                  )}
+                    {banner.count > 0 && (
+                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                        {banner.count} منتج متاح
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0099DD] transition">
+                    {banner.title}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{banner.subtitle}</p>
                 </div>
-                <h4 className="font-extrabold text-slate-900 text-sm group-hover:text-[#0099DD] transition">
-                  {banner.title}
-                </h4>
-                <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">{banner.subtitle}</p>
-              </div>
 
-              <div className="relative h-28 w-full bg-slate-50 overflow-hidden border-t border-slate-100">
-                <Image
-                  src={banner.image}
-                  alt={banner.title}
-                  fill
-                  className="object-cover group-hover:scale-105 transition duration-300"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent flex items-end p-2.5">
-                  <span className="text-white text-[11px] font-bold flex items-center gap-1 group-hover:translate-x-1 transition">
-                    تصفح الكتالوج <ArrowLeft className="w-3 h-3" />
-                  </span>
+                <div className="relative h-28 w-full bg-slate-100 overflow-hidden border-t border-slate-100 flex items-center justify-center">
+                  {banner.image ? (
+                    <Image
+                      src={banner.image}
+                      alt={banner.title}
+                      fill
+                      className="object-cover group-hover:scale-105 transition duration-300"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-slate-400 group-hover:scale-105 transition duration-300">
+                      {getCategoryIcon(banner.slug)}
+                      <span className="text-[10px] font-bold text-slate-500 mt-1">{banner.title}</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent flex items-end p-2.5">
+                    <span className="text-white text-[11px] font-bold flex items-center gap-1 group-hover:translate-x-1 transition">
+                      تصفح الكتالوج <ArrowLeft className="w-3 h-3" />
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* 3. "عروض اليوم DEAL" Carousel */}
       {hotDeals.length > 0 && (

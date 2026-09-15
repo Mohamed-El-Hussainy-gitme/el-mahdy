@@ -36,8 +36,8 @@ export default function Navbar() {
     setIsShortageModalOpen,
     currentUser,
     staffSession,
-    onlyDiscounts,
-    setOnlyDiscounts,
+    onlyFeatured,
+    setOnlyFeatured,
     wishlist,
     setIsWishlistOpen,
     storeSettings,
@@ -201,15 +201,15 @@ export default function Navbar() {
                   <ul className="text-[11px] space-y-2 text-slate-600 leading-relaxed">
                     <li className="flex items-start gap-1.5">
                       <span className="text-emerald-500 font-black">✓</span>
-                      <span>توصيل لكافة محافظات جمهورية مصر العربية للمحلات والشركات.</span>
+                      <span>{storeSettings.delivery_promise_1 || 'توصيل لكافة محافظات جمهورية مصر العربية للمحلات والشركات.'}</span>
                     </li>
                     <li className="flex items-start gap-1.5">
                       <span className="text-emerald-500 font-black">✓</span>
-                      <span>شحن وتجهيز الطلب خلال 24 - 48 ساعة عبر مناديب الشحن المعتمدين.</span>
+                      <span>{storeSettings.delivery_promise_2 || 'تجهيز وشحن الطلبات بالتنسيق مع المندوب المعتمد ومسؤولي المستودع.'}</span>
                     </li>
                     <li className="flex items-start gap-1.5">
                       <span className="text-emerald-500 font-black">✓</span>
-                      <span>إصدار بوليصة شحن وتتبع مباشر لكل بضاعة تجارية.</span>
+                      <span>{storeSettings.delivery_promise_3 || 'إصدار بوليصة شحن ومتابعة حالة الطلب لكل بضاعة تجارية.'}</span>
                     </li>
                   </ul>
                 </div>
@@ -373,9 +373,9 @@ export default function Navbar() {
           {/* Quick Filters on Left */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setOnlyDiscounts(!onlyDiscounts)}
+              onClick={() => setOnlyFeatured(!onlyFeatured)}
               className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border transition ${
-                onlyDiscounts
+                onlyFeatured
                   ? 'bg-[#0099DD] text-white border-[#0099DD]'
                   : 'bg-white text-slate-700 border-slate-300 hover:border-[#0099DD]'
               }`}

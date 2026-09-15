@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { SlidersHorizontal, RotateCcw, Truck, Percent, Check } from 'lucide-react';
+import { SlidersHorizontal, RotateCcw, Percent, Check } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 
 export default function SidebarFilters() {
@@ -14,10 +14,8 @@ export default function SidebarFilters() {
     setSelectedBrand,
     priceRange,
     setPriceRange,
-    onlyDiscounts,
-    setOnlyDiscounts,
-    onlyFreeShipping,
-    setOnlyFreeShipping,
+    onlyFeatured,
+    setOnlyFeatured,
     clearFilters,
   } = useStore();
 
@@ -122,28 +120,15 @@ export default function SidebarFilters() {
           />
         </div>
 
-        {/* Checkboxes matching Image 1 & 2 */}
         <div className="pt-2 space-y-2 text-xs border-t border-slate-100">
           <label className="flex items-center gap-2 cursor-pointer text-slate-700 hover:text-slate-900 select-none">
             <input
               type="checkbox"
-              checked={onlyDiscounts}
-              onChange={(e) => setOnlyDiscounts(e.target.checked)}
+              checked={onlyFeatured}
+              onChange={(e) => setOnlyFeatured(e.target.checked)}
               className="w-4 h-4 rounded text-[#0099DD] focus:ring-[#0099DD] border-slate-300"
             />
-            <span>عرض المخفضات فقط</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer text-slate-700 hover:text-slate-900 select-none">
-            <input
-              type="checkbox"
-              checked={onlyFreeShipping}
-              onChange={(e) => setOnlyFreeShipping(e.target.checked)}
-              className="w-4 h-4 rounded text-[#0099DD] focus:ring-[#0099DD] border-slate-300"
-            />
-            <span className="flex items-center gap-1">
-              شحن مجاني فقط <Truck className="w-3.5 h-3.5 text-[#0099DD]" />
-            </span>
+            <span>عرض المنتجات المميزة فقط</span>
           </label>
         </div>
 

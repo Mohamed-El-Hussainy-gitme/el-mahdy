@@ -82,6 +82,10 @@ export function validateProductData(data: Partial<Product>): { valid: boolean; e
     errors.push('السعر يجب أن يكون رقماً موجباً أو صفراً.');
   }
 
+  if (!data.image_url || data.image_url.trim().length === 0) {
+    errors.push('يجب رفع صورة المنتج الرئيسية أولاً.');
+  }
+
   return {
     valid: errors.length === 0,
     errors,
