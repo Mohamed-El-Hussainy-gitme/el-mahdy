@@ -17,6 +17,7 @@ import {
   AdjustmentType,
   ReturnReason,
   StoreSettings,
+  CustomRole,
 } from '@/types';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildCategoryTree, validateCategoryDeletion } from '@/services/categoryService';
@@ -50,6 +51,51 @@ export const DEFAULT_STICKY_SALES_REP: UserProfile = {
   phone: '201012345678',
   role: 'sales_agent',
 };
+
+export const DEFAULT_CUSTOM_ROLES: CustomRole[] = [
+  {
+    id: '00000008-0000-0000-0000-000000000001',
+    name_ar: 'مدير النظام (Admin)',
+    description: 'صلاحيات كاملة وغير مقيدة على كافة أقسام وإعدادات النظام',
+    is_system: true,
+    can_manage_products: true,
+    can_receive_customers: true,
+    can_manage_orders: true,
+    can_manage_categories: true,
+    can_manage_matrix: true,
+    can_manage_customers: true,
+    can_manage_shortages: true,
+    can_manage_settings: true,
+  },
+  {
+    id: '00000008-0000-0000-0000-000000000002',
+    name_ar: 'مندوب مبيعات معتمد (Sales Agent)',
+    description: 'استقبال ومتابعة العملاء والطلبات وتسجيل النواقص',
+    is_system: true,
+    can_manage_products: false,
+    can_receive_customers: true,
+    can_manage_orders: true,
+    can_manage_categories: false,
+    can_manage_matrix: false,
+    can_manage_customers: true,
+    can_manage_shortages: true,
+    can_manage_settings: false,
+  },
+  {
+    id: '00000008-0000-0000-0000-000000000003',
+    name_ar: 'مسؤول المستودع والتجهيز (Warehouse)',
+    description: 'تجهيز طلبيات الشحن ومطابقة المخزون ومصفوفة الموديلات',
+    is_system: true,
+    can_manage_products: false,
+    can_receive_customers: false,
+    can_manage_orders: true,
+    can_manage_categories: false,
+    can_manage_matrix: true,
+    can_manage_customers: false,
+    can_manage_shortages: false,
+    can_manage_settings: false,
+  },
+];
 
 interface StoreContextType {
   // Sync Status
@@ -151,6 +197,13 @@ interface StoreContextType {
   customers: UserProfile[];
   staffMembers: UserProfile[];
   assignCustomerSalesRep: (customerId: string, salesRepId: string) => Promise<void>;
+  getLeastLoadedSalesRep: () => UserProfile | null;
+
+  // Custom Roles & Permissions Management (Admin)
+  customRoles: CustomRole[];
+  addCustomRole: (newRole: Omit<CustomRole, 'id' | 'created_at' | 'updated_at'>) => Promise<{ success: boolean; message?: string }>;
+  updateCustomRole: (id: string, updates: Partial<CustomRole>) => Promise<{ success: boolean; message?: string }>;
+  deleteCustomRole: (id: string) => Promise<{ success: boolean; message?: string }>;
 
   // Staff / Admin Auth & RBAC
   staffSession: UserProfile | null;
@@ -202,6 +255,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [inventoryAdjustments, setInventoryAdjustments] = useState<InventoryAdjustment[]>([]);
   const [customers, setCustomers] = useState<UserProfile[]>([]);
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>(DEFAULT_CUSTOM_ROLES);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Filters
@@ -292,7 +346,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           let { data: profile } = await supabase
             .from('user_profiles')
-            .select('*')
+            .select('*, custom_role:custom_roles(*)')
             .eq('auth_user_id', session.user.id)
             .maybeSingle();
 
@@ -300,7 +354,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (!profile && session.user.email) {
             const { data: byEmail } = await supabase
               .from('user_profiles')
-              .select('*')
+              .select('*, custom_role:custom_roles(*)')
               .eq('email', session.user.email)
               .maybeSingle();
             if (byEmail) {
@@ -578,14 +632,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setCustomers(dbCustomers);
       }
 
-      // Staff Members List (Admin, Sales, Warehouse)
+      // Staff Members List (Admin, Sales, Warehouse, or any custom role staff)
       const { data: dbStaff } = await supabase
         .from('user_profiles')
-        .select('*')
-        .in('role', ['admin', 'sales_agent', 'warehouse_preparer'])
+        .select('*, custom_role:custom_roles(*)')
+        .neq('role', 'customer')
         .order('created_at', { ascending: true });
       if (dbStaff) {
         setStaffMembers(dbStaff as UserProfile[]);
+      }
+
+      // Custom Roles List
+      const { data: dbRoles } = await supabase
+        .from('custom_roles')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (dbRoles && dbRoles.length > 0) {
+        setCustomRoles(dbRoles as CustomRole[]);
       }
 
       // Inventory Adjustments
@@ -1597,6 +1660,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
+    // Auto least-loaded sales rep assignment
+    const leastRep = getLeastLoadedSalesRep();
+
     if (isSupabaseConfigured()) {
       try {
         // Use atomic secure registration RPC
@@ -1617,10 +1683,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             phone: u.phone,
             company_name: u.company_name,
             role: 'customer',
-            // First-Touch Stickiness: new customer starts unassigned; first sales agent to handle their order claims them
-            assigned_sales_rep_id: u.assigned_sales_rep_id || undefined,
-            assigned_sales_rep_name: u.assigned_sales_rep_name || undefined,
-            assigned_sales_rep_phone: u.assigned_sales_rep_phone || undefined,
+            assigned_sales_rep_id: u.assigned_sales_rep_id || leastRep?.id || undefined,
+            assigned_sales_rep_name: u.assigned_sales_rep_name || leastRep?.full_name || undefined,
+            assigned_sales_rep_phone: u.assigned_sales_rep_phone || leastRep?.phone || undefined,
           };
           setCurrentUser(userProfile);
           try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
@@ -1648,7 +1713,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             phone: cleanPhone,
             company_name: cleanCompany,
             role: 'customer',
-            assigned_sales_rep_id: null, // Unassigned: First-Touch Stickiness via updateOrderStatus
+            assigned_sales_rep_id: leastRep?.id || null,
           }, { onConflict: 'phone' })
           .select()
           .maybeSingle();
@@ -1661,9 +1726,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           phone: cleanPhone,
           company_name: cleanCompany,
           role: 'customer',
-          assigned_sales_rep_id: undefined,
-          assigned_sales_rep_name: undefined,
-          assigned_sales_rep_phone: undefined,
+          assigned_sales_rep_id: leastRep?.id,
+          assigned_sales_rep_name: leastRep?.full_name,
+          assigned_sales_rep_phone: leastRep?.phone,
         };
         setCurrentUser(userProfile);
         try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
@@ -1681,9 +1746,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       phone: cleanPhone,
       company_name: cleanCompany,
       role: 'customer',
-      assigned_sales_rep_id: undefined,
-      assigned_sales_rep_name: undefined,
-      assigned_sales_rep_phone: undefined,
+      assigned_sales_rep_id: leastRep?.id,
+      assigned_sales_rep_name: leastRep?.full_name,
+      assigned_sales_rep_phone: leastRep?.phone,
     };
     setCurrentUser(userProfile);
     try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
@@ -2016,6 +2081,115 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Automatic Least-Loaded Sales Rep (Equal Opportunities Distribution)
+  const getLeastLoadedSalesRep = useCallback((): UserProfile | null => {
+    const eligibleReps = staffMembers.filter((s) => {
+      if (s.is_active === false) return false;
+      if (s.role === 'sales_agent') return true;
+      if (s.custom_role?.can_receive_customers) return true;
+      const cRole = customRoles.find((r) => r.id === s.custom_role_id);
+      if (cRole?.can_receive_customers) return true;
+      return false;
+    });
+
+    if (eligibleReps.length === 0) {
+      const adminRep = staffMembers.find((s) => s.role === 'admin' && s.is_active !== false);
+      return adminRep || DEFAULT_STICKY_SALES_REP;
+    }
+
+    const countMap: Record<string, number> = {};
+    eligibleReps.forEach((r) => { countMap[r.id] = 0; });
+
+    customers.forEach((c) => {
+      if (c.assigned_sales_rep_id && countMap[c.assigned_sales_rep_id] !== undefined) {
+        countMap[c.assigned_sales_rep_id]++;
+      }
+    });
+
+    let minRep = eligibleReps[0];
+    let minCount = countMap[minRep.id] ?? 0;
+
+    for (let i = 1; i < eligibleReps.length; i++) {
+      const rep = eligibleReps[i];
+      const count = countMap[rep.id] ?? 0;
+      if (count < minCount) {
+        minCount = count;
+        minRep = rep;
+      }
+    }
+
+    return minRep;
+  }, [staffMembers, customers, customRoles]);
+
+  // Custom Roles & Permissions Management (Admin)
+  const addCustomRole = async (newRole: Omit<CustomRole, 'id' | 'created_at' | 'updated_at'>) => {
+    const roleId = generateUUID();
+    const roleObj: CustomRole = {
+      ...newRole,
+      id: roleId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setCustomRoles((prev) => [...prev, roleObj]);
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase.from('custom_roles').insert({
+          id: roleId,
+          ...newRole,
+        });
+        if (error) throw error;
+      } catch (err: any) {
+        console.warn('addCustomRole error:', err);
+        return { success: false, message: err.message || 'فشل حفظ الدور' };
+      }
+      await refreshData();
+    }
+    return { success: true };
+  };
+
+  const updateCustomRole = async (id: string, updates: Partial<CustomRole>) => {
+    setCustomRoles((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...updates, updated_at: new Date().toISOString() } : r))
+    );
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase
+          .from('custom_roles')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('id', id);
+        if (error) throw error;
+      } catch (err: any) {
+        console.warn('updateCustomRole error:', err);
+        return { success: false, message: err.message || 'فشل تعديل الدور' };
+      }
+      await refreshData();
+    }
+    return { success: true };
+  };
+
+  const deleteCustomRole = async (id: string) => {
+    const existing = customRoles.find((r) => r.id === id);
+    if (existing?.is_system) {
+      return { success: false, message: 'لا يمكن حذف الأدوار الأساسية للنظام' };
+    }
+    const assignedStaff = staffMembers.filter((s) => s.custom_role_id === id);
+    if (assignedStaff.length > 0) {
+      return { success: false, message: `لا يمكن حذف هذا الدور لوجود ${assignedStaff.length} موظف مرتبطين به حالياً` };
+    }
+    setCustomRoles((prev) => prev.filter((r) => r.id !== id));
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase.from('custom_roles').delete().eq('id', id);
+        if (error) throw error;
+      } catch (err: any) {
+        console.warn('deleteCustomRole error:', err);
+        return { success: false, message: err.message || 'فشل حذف الدور' };
+      }
+      await refreshData();
+    }
+    return { success: true };
+  };
+
   // Shortages System (Internal Admin Alert — No customer reward/discount)
   const submitShortage = async (brand: string, modelName: string, notes?: string) => {
     const shortageId = generateUUID();
@@ -2175,6 +2349,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         customers,
         staffMembers,
         assignCustomerSalesRep,
+        getLeastLoadedSalesRep,
+
+        customRoles,
+        addCustomRole,
+        updateCustomRole,
+        deleteCustomRole,
 
         staffSession,
         staffLogin,

@@ -32,10 +32,24 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
 
   // Available sales agents for sticky assignment (from live DB staff)
   const salesAgents: UserProfile[] = useMemo(() => {
-    const fromStaff = staffMembers.filter((s) => s.role === 'sales_agent' || s.role === 'admin');
+    const fromStaff = staffMembers.filter(
+      (s) => s.role === 'sales_agent' || s.role === 'admin' || s.custom_role?.can_receive_customers
+    );
     if (fromStaff.length > 0) return fromStaff;
     return [DEFAULT_STICKY_SALES_REP];
   }, [staffMembers]);
+
+  // Compute number of customers assigned to each sales rep
+  const repCustomerCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    salesAgents.forEach((sa) => { map[sa.id] = 0; });
+    customers.forEach((c) => {
+      if (c.assigned_sales_rep_id && map[c.assigned_sales_rep_id] !== undefined) {
+        map[c.assigned_sales_rep_id]++;
+      }
+    });
+    return map;
+  }, [salesAgents, customers]);
 
   // Compute spend and order count per customer
   const customerStats = useMemo(() => {
@@ -141,7 +155,9 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
                 <option value="all">كل المناديب</option>
                 <option value="unassigned">بدون مندوب معين</option>
                 {salesAgents.map((sa) => (
-                  <option key={sa.id} value={sa.id}>{sa.full_name}</option>
+                  <option key={sa.id} value={sa.id}>
+                    {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل)
+                  </option>
                 ))}
               </select>
             )}
@@ -152,9 +168,9 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
         <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-xs text-sky-900 flex items-start gap-2.5">
           <UserCheck className="w-4 h-4 text-[#0099DD] shrink-0 mt-0.5" />
           <div className="leading-relaxed">
-            <span className="font-bold">قاعدة المندوب الدائم (Sticky Sales Rep): </span>
-            يرتبط العميل بمندوب مبيعات معتمد فور تأكيد أول طلب. جميع طلبات العميل الحالية
-            والمستقبلية تُحال تلقائياً إلى هذا المندوب لضمان استمرارية خدمة حسابات الجملة.
+            <span className="font-bold">نظام التوزيع العادل التلقائي (Least-Loaded Distribution): </span>
+            يتم تحويل أي عميل جديد تلقائياً إلى المندوب صاحب أقل عدد عملاء لضمان تكافؤ الفرص التام بين المناديب.
+            إذا كان العميل مرتبطاً بمندوب مسبقاً يحتفظ بمندوبه الدائم (Sticky Rep)، كما تملك الإدارة الصلاحية الكاملة لإعادة توجيه العميل لأي مندوب في أي وقت.
           </div>
         </div>
       </div>
@@ -235,7 +251,7 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
                             >
                               {salesAgents.map((sa) => (
                                 <option key={sa.id} value={sa.id}>
-                                  {sa.full_name}
+                                  {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل)
                                 </option>
                               ))}
                             </select>

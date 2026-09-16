@@ -35,8 +35,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Dynamic route security guard: smoothly redirect users if they navigate to an unauthorized path
   React.useEffect(() => {
     if (staffSession && pathname && !pathname.startsWith('/admin/login')) {
-      if (!canAccessAdminRoute(userRole, pathname)) {
-        const fallback = getDefaultAdminRoute(userRole);
+      if (!canAccessAdminRoute(userRole, pathname, staffSession)) {
+        const fallback = getDefaultAdminRoute(userRole, staffSession);
         router.replace(fallback);
       }
     }
@@ -60,7 +60,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // Guard: Not logged in or customer role
-  if (!staffSession || !canViewDashboard(staffSession.role)) {
+  if (!staffSession || !canViewDashboard(staffSession.role, staffSession)) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans" dir="rtl">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-200 text-center space-y-4">
@@ -69,7 +69,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           <h1 className="text-xl font-extrabold text-slate-900">منطقة إدارية محمية بالكامل</h1>
           <p className="text-xs text-slate-500 leading-relaxed">
-            الوصول لهذه اللوحة مخصص حصراً لموظفي الشركة (الإدارة، مناديب المبيعات، ومسؤولي التجهيز والمستودع). حسابات
+            الوصول لهذه اللوحة مخصص حصراً لموظفي الشركة (الإدارة، مناديب المبيعات، ومسؤولي التجهيز والمستودع، أو أصحاب الأدوار المخصصة). حسابات
             العملاء لا تملك أي صلاحية دخول هنا.
           </p>
           <div className="pt-2 flex flex-col gap-2">
@@ -95,43 +95,72 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Calculate orders accessible to this specific role
   const roleAccessibleOrders = filterOrdersForRole(orders, staffSession);
 
-  // Tailor navigation items specifically for each role
-  const navItems = (() => {
-    if (userRole === 'admin') {
-      return [
-        { href: '/admin', label: 'نظرة عامة', icon: LayoutDashboard },
-        { href: '/admin/orders', label: 'الطلبات ودورة الحياة', icon: Truck, count: orders.length },
-        { href: '/admin/products', label: 'المنتجات والكتالوج', icon: Package, count: products.length },
-        { href: '/admin/categories', label: 'شجرة التصنيفات', icon: FolderTree, count: categories.length },
-        { href: '/admin/matrix', label: 'مصفوفة التوافق', icon: Boxes },
-        { href: '/admin/shortages', label: 'تنبيهات النواقص', icon: AlertTriangle, count: shortages.length },
-        { href: '/admin/customers', label: 'العملاء والمناديب', icon: Users },
-        { href: '/admin/staff', label: 'الموظفون والصلاحيات', icon: Shield },
-        { href: '/admin/settings', label: 'إعدادات المتجر', icon: Settings },
-      ];
-    }
+  // Dynamically tailor navigation items based on granular permissions (System Roles & Custom Roles)
+  const allNavCandidateItems = [
+    {
+      href: '/admin',
+      label: userRole === 'sales_agent' ? 'نظرة عامة (المبيعات)' : 'نظرة عامة',
+      icon: LayoutDashboard,
+    },
+    {
+      href: '/admin/orders',
+      label:
+        userRole === 'sales_agent'
+          ? 'طلبات عملائي'
+          : userRole === 'warehouse_preparer'
+          ? 'طلبات التجهيز والشحن'
+          : 'الطلبات ودورة الحياة',
+      icon: Truck,
+      count: userRole === 'admin' ? orders.length : roleAccessibleOrders.length,
+    },
+    {
+      href: '/admin/products',
+      label:
+        userRole === 'warehouse_preparer'
+          ? 'كتالوج الأصناف للتجهيز'
+          : userRole === 'sales_agent'
+          ? 'الكتالوج والأسعار'
+          : 'المنتجات والكتالوج',
+      icon: Package,
+      count: products.length,
+    },
+    {
+      href: '/admin/categories',
+      label: 'شجرة التصنيفات',
+      icon: FolderTree,
+      count: categories.length,
+    },
+    {
+      href: '/admin/matrix',
+      label: userRole === 'warehouse_preparer' ? 'مصفوفة التوافق والمخزون' : 'مصفوفة التوافق',
+      icon: Boxes,
+    },
+    {
+      href: '/admin/shortages',
+      label: 'تنبيهات النواقص',
+      icon: AlertTriangle,
+      count: shortages.length,
+    },
+    {
+      href: '/admin/customers',
+      label: userRole === 'sales_agent' ? 'عملائي المعتمدون' : 'العملاء والمناديب',
+      icon: Users,
+    },
+    {
+      href: '/admin/staff',
+      label: 'الموظفون والأدوار',
+      icon: Shield,
+    },
+    {
+      href: '/admin/settings',
+      label: 'إعدادات المتجر',
+      icon: Settings,
+    },
+  ];
 
-    if (userRole === 'sales_agent') {
-      return [
-        { href: '/admin', label: 'نظرة عامة (المبيعات)', icon: LayoutDashboard },
-        { href: '/admin/orders', label: 'طلبات عملائي', icon: Truck, count: roleAccessibleOrders.length },
-        { href: '/admin/customers', label: 'عملائي المعتمدون', icon: Users },
-        { href: '/admin/products', label: 'الكتالوج والأسعار', icon: Package, count: products.length },
-        { href: '/admin/matrix', label: 'مصفوفة التوافق والموديلات', icon: Boxes },
-        { href: '/admin/shortages', label: 'تنبيهات النواقص', icon: AlertTriangle, count: shortages.length },
-      ];
-    }
-
-    if (userRole === 'warehouse_preparer') {
-      return [
-        { href: '/admin/orders', label: 'طلبات التجهيز والشحن', icon: Truck, count: roleAccessibleOrders.length },
-        { href: '/admin/matrix', label: 'مصفوفة التوافق والمخزون', icon: Boxes },
-        { href: '/admin/products', label: 'كتالوج الأصناف للتجهيز', icon: Package, count: products.length },
-      ];
-    }
-
-    return [];
-  })();
+  const navItems = allNavCandidateItems.filter((item) =>
+    canAccessAdminRoute(userRole, item.href, staffSession)
+  );
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-900" dir="rtl">

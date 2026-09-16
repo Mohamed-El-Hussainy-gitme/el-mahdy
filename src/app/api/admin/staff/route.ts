@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { fullName, email, phone, role, password } = body;
+    const { fullName, email, phone, role, password, customRoleId } = body;
 
     if (!fullName?.trim() || !phone?.trim() || !password) {
       return NextResponse.json(
@@ -85,12 +85,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' }, { status: 400 });
     }
 
-    const validRoles = ['admin', 'sales_agent', 'warehouse_preparer', 'warehouse'];
-    if (!validRoles.includes(role)) {
+    // Lookup custom role if provided
+    let customRoleRecord: any = null;
+    if (customRoleId) {
+      const { data: cr } = await supabaseAdmin
+        .from('custom_roles')
+        .select('*')
+        .eq('id', customRoleId)
+        .maybeSingle();
+      if (cr) {
+        customRoleRecord = cr;
+      }
+    }
+
+    const validRoles = ['admin', 'sales_agent', 'warehouse_preparer', 'warehouse', 'custom'];
+    if (!customRoleRecord && !validRoles.includes(role)) {
       return NextResponse.json({ success: false, error: 'نوع الدور الوظيفي غير صالح' }, { status: 400 });
     }
 
-    const normalizedRole = role === 'warehouse' ? 'warehouse_preparer' : role;
+    let normalizedRole = role === 'warehouse' ? 'warehouse_preparer' : (role || 'custom');
+    if (customRoleRecord && (!role || role === 'custom')) {
+      if (customRoleRecord.is_system) {
+        normalizedRole = customRoleRecord.name_ar.includes('Admin')
+          ? 'admin'
+          : customRoleRecord.name_ar.includes('Sales')
+          ? 'sales_agent'
+          : 'warehouse_preparer';
+      } else {
+        normalizedRole = customRoleRecord.can_receive_customers ? 'sales_agent' : 'custom';
+      }
+    }
     const cleanPhone = normalizeEgyptianPhone(phone);
     const cleanEmail = (email?.trim() || `${cleanPhone}@elmahdy.com`).toLowerCase();
     const cleanName = fullName.trim();
@@ -133,6 +157,8 @@ export async function POST(request: NextRequest) {
         full_name: cleanName,
         phone: cleanPhone,
         role: normalizedRole,
+        custom_role_id: customRoleRecord ? customRoleRecord.id : null,
+        custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
       },
     });
 
@@ -167,6 +193,8 @@ export async function POST(request: NextRequest) {
           role: normalizedRole,
           email: cleanEmail,
           is_active: true,
+          custom_role_id: customRoleRecord ? customRoleRecord.id : null,
+          custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingTriggerProfile.id)
@@ -191,6 +219,8 @@ export async function POST(request: NextRequest) {
           phone: cleanPhone,
           role: normalizedRole,
           is_active: true,
+          custom_role_id: customRoleRecord ? customRoleRecord.id : null,
+          custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
         })
         .select()
         .single();
@@ -234,7 +264,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, fullName, phone, role, password } = body;
+    const { id, fullName, phone, role, password, customRoleId } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'معرّف الموظف مطلوب' }, { status: 400 });
@@ -267,10 +297,35 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const validRoles = ['admin', 'sales_agent', 'warehouse_preparer', 'warehouse'];
-    const newRole = role ? (role === 'warehouse' ? 'warehouse_preparer' : role) : targetProfile.role;
-    if (role && !validRoles.includes(role)) {
+    // Lookup custom role if provided
+    let customRoleRecord: any = null;
+    if (customRoleId) {
+      const { data: cr } = await supabaseAdmin
+        .from('custom_roles')
+        .select('*')
+        .eq('id', customRoleId)
+        .maybeSingle();
+      if (cr) {
+        customRoleRecord = cr;
+      }
+    }
+
+    const validRoles = ['admin', 'sales_agent', 'warehouse_preparer', 'warehouse', 'custom'];
+    if (role && !customRoleRecord && !validRoles.includes(role)) {
       return NextResponse.json({ success: false, error: 'نوع الدور الوظيفي غير صالح' }, { status: 400 });
+    }
+
+    let newRole = role ? (role === 'warehouse' ? 'warehouse_preparer' : role) : targetProfile.role;
+    if (customRoleRecord && (!role || role === 'custom')) {
+      if (customRoleRecord.is_system) {
+        newRole = customRoleRecord.name_ar.includes('Admin')
+          ? 'admin'
+          : customRoleRecord.name_ar.includes('Sales')
+          ? 'sales_agent'
+          : 'warehouse_preparer';
+      } else {
+        newRole = customRoleRecord.can_receive_customers ? 'sales_agent' : 'custom';
+      }
     }
 
     const cleanName = fullName !== undefined ? String(fullName).trim() : targetProfile.full_name;
@@ -283,6 +338,11 @@ export async function PATCH(request: NextRequest) {
       role: newRole,
       updated_at: new Date().toISOString(),
     };
+
+    if (customRoleId !== undefined) {
+      updatePayload.custom_role_id = customRoleRecord ? customRoleRecord.id : null;
+      updatePayload.custom_role_name = customRoleRecord ? customRoleRecord.name_ar : null;
+    }
 
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
       .from('user_profiles')
@@ -302,6 +362,8 @@ export async function PATCH(request: NextRequest) {
           full_name: cleanName,
           phone: cleanPhone,
           role: newRole,
+          custom_role_id: updatePayload.custom_role_id !== undefined ? updatePayload.custom_role_id : targetProfile.custom_role_id,
+          custom_role_name: updatePayload.custom_role_name !== undefined ? updatePayload.custom_role_name : targetProfile.custom_role_name,
         },
       };
 

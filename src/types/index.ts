@@ -1,4 +1,21 @@
-export type UserRole = 'admin' | 'sales_agent' | 'warehouse_preparer' | 'customer';
+export type UserRole = 'admin' | 'sales_agent' | 'warehouse_preparer' | 'customer' | string;
+
+export interface CustomRole {
+  id: string;
+  name_ar: string;
+  description?: string;
+  is_system: boolean;
+  can_manage_products: boolean;
+  can_receive_customers: boolean;
+  can_manage_orders: boolean;
+  can_manage_categories: boolean;
+  can_manage_matrix: boolean;
+  can_manage_customers: boolean;
+  can_manage_shortages: boolean;
+  can_manage_settings: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export interface Category {
   id: string;
@@ -123,6 +140,9 @@ export interface UserProfile {
   assigned_sales_rep_id?: string;
   assigned_sales_rep_name?: string;
   assigned_sales_rep_phone?: string;
+  custom_role_id?: string;
+  custom_role_name?: string;
+  custom_role?: CustomRole;
   created_at?: string;
 }
 

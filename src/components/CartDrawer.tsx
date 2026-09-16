@@ -223,9 +223,26 @@ export default function CartDrawer() {
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="px-2 text-xs font-bold text-slate-800">
-                            {item.quantity}
-                          </span>
+                          <input
+                            type="number"
+                            min={item.moq}
+                            value={item.quantity}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (!isNaN(val)) {
+                                updateCartQuantity(item.product.id, val, item.model?.id);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (isNaN(val) || val < item.moq) {
+                                updateCartQuantity(item.product.id, item.moq, item.model?.id);
+                              }
+                            }}
+                            className="w-12 text-center text-xs font-bold text-slate-800 focus:outline-none focus:bg-sky-50 py-0.5 border-x border-slate-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            title="اضغط لكتابة الكمية مباشرة"
+                          />
                           <button
                             onClick={() =>
                               updateCartQuantity(
