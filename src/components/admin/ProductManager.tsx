@@ -32,7 +32,7 @@ interface ProductManagerProps {
   currentRole: UserRole;
   onAddProduct: (product: any) => void | Promise<any>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => void | Promise<void>;
-  onDeleteProduct: (id: string) => void | Promise<void>;
+  onDeleteProduct: (id: string) => any;
   onToggleActive?: (id: string, active: boolean) => void | Promise<void>;
 }
 
@@ -240,9 +240,12 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا المنتج نهائياً من الكتالوج؟')) {
-      onDeleteProduct(id);
+      const res: any = await onDeleteProduct(id);
+      if (res && res.success === false) {
+        alert(res.message || 'فشل مسح المنتج من قاعدة البيانات');
+      }
     }
   };
 
@@ -582,15 +585,33 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                 />
               </div>
 
-              {/* Main Image with Supabase Storage Upload */}
+              {/* Main Image with Supabase Storage Upload & Preview */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">صورة المنتج الرئيسية</label>
+                {imageUrl ? (
+                  <div className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200 mb-2">
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-300 bg-white shrink-0 shadow-sm">
+                      <Image src={imageUrl} alt="معاينة" fill className="object-contain p-1" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-mono text-slate-500 truncate" dir="ltr">{imageUrl}</p>
+                      <button
+                        type="button"
+                        onClick={() => setImageUrl('')}
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 transition"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>إزالة ومسح الصورة</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="flex gap-2">
                   <input
                     type="url"
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://..."
+                    placeholder="https://... أو ارفع صورة من جهازك"
                     className="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#0099DD] text-xs font-mono"
                   />
                   <input

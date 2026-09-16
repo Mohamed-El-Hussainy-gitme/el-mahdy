@@ -35,10 +35,8 @@ export default function CatalogsPage() {
     }
   };
 
-  const getCategoryImageUrl = (cat: { id: string; slug: string; image_url?: string }) => {
+  const getCategoryImageUrl = (cat: { id: string; slug: string; image_url?: string | null }) => {
     if (cat.image_url && cat.image_url.trim()) return cat.image_url;
-    const firstProd = products.find((p) => p.category_ids?.includes(cat.id) && p.image_url && p.image_url.trim());
-    if (firstProd?.image_url) return firstProd.image_url;
     return null;
   };
 

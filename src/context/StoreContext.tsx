@@ -105,7 +105,7 @@ interface StoreContextType {
   // Categories & CRUD
   categories: Category[];
   categoriesTree: Category[];
-  addCategory: (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string }) => Promise<void>;
+  addCategory: (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string | null }) => Promise<void>;
   updateCategory: (id: string, cat: Partial<Category>) => Promise<void>;
   deleteCategory: (id: string) => Promise<{ success: boolean; message?: string }>;
   selectedCategorySlug: string;
@@ -127,7 +127,7 @@ interface StoreContextType {
     category_ids: string[];
   }) => Promise<Product>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
-  deleteProduct: (id: string) => Promise<void>;
+  deleteProduct: (id: string) => Promise<{ success: boolean; message?: string }>;
   toggleProductActive: (id: string, active: boolean) => Promise<void>;
 
   // Master Models & Compatibility Matrix CRUD
@@ -783,7 +783,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // ==========================================
   // Category Tree CRUD
   // ==========================================
-  const addCategory = async (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string }) => {
+  const addCategory = async (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string | null }) => {
     const newCatId = generateUUID();
     const newCat: Category = {
       id: newCatId,
@@ -817,9 +817,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const getAuthToken = async () => {
+    if (!isSupabaseConfigured()) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
+  };
+
   const updateCategory = async (id: string, updated: Partial<Category>) => {
     setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...updated } : c))
+      prev.map((c) => (c.id === id ? {
+        ...c,
+        ...updated,
+        image_url: updated.image_url !== undefined ? (updated.image_url || undefined) : c.image_url,
+      } : c))
     );
 
     if (isSupabaseConfigured()) {
@@ -843,19 +853,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const deleteCategory = async (id: string) => {
+  const deleteCategory = async (id: string): Promise<{ success: boolean; message?: string }> => {
     const validation = validateCategoryDeletion(categories, id, products);
     if (!validation.valid) {
       return { success: false, message: validation.reason };
     }
 
+    const previousCategories = categories;
     setCategories((prev) => prev.filter((c) => c.id !== id));
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase.from('categories').delete().eq('id', id);
-      } catch (err) {
-        console.warn('Supabase deleteCategory error:', err);
+        const token = await getAuthToken();
+        if (token) {
+          const res = await fetch(`/api/admin/categories?id=${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const resData = await res.json();
+          if (!res.ok || !resData.success) {
+            setCategories(previousCategories);
+            return { success: false, message: resData.error || 'فشل حذف التصنيف من الخادم' };
+          }
+        } else {
+          await supabase.from('product_categories').delete().eq('category_id', id);
+          await supabase.from('categories').update({ parent_id: null }).eq('parent_id', id);
+          const { error } = await supabase.from('categories').delete().eq('id', id);
+          if (error) {
+            setCategories(previousCategories);
+            return { success: false, message: error.message };
+          }
+        }
+      } catch (err: unknown) {
+        setCategories(previousCategories);
+        return { success: false, message: err instanceof Error ? err.message : 'حدث خطأ أثناء حذف التصنيف' };
       }
     }
 
@@ -945,7 +976,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (updated.description_ar !== undefined) dbPayload.description_ar = updated.description_ar;
         if (updated.price !== undefined) dbPayload.price = updated.price;
         if (updated.cost_price !== undefined) dbPayload.cost_price = updated.cost_price;
-        if (updated.image_url !== undefined) dbPayload.image_url = updated.image_url;
+        if (updated.image_url !== undefined) dbPayload.image_url = updated.image_url || null;
         if (updated.gallery_urls !== undefined) dbPayload.gallery_urls = updated.gallery_urls;
         if (updated.is_exchange_only !== undefined) dbPayload.is_exchange_only = updated.is_exchange_only;
         if (updated.is_featured !== undefined) dbPayload.is_featured = updated.is_featured;
@@ -973,16 +1004,43 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     await updateProduct(id, { is_active: active });
   };
 
-  const deleteProduct = async (id: string) => {
+  const deleteProduct = async (id: string): Promise<{ success: boolean; message?: string }> => {
+    const previousProducts = products;
     setProducts((prev) => prev.filter((p) => p.id !== id));
     invalidateCatalogCache();
+
     if (isSupabaseConfigured()) {
       try {
-        await supabase.from('products').delete().eq('id', id);
-      } catch (err) {
-        console.warn('Supabase deleteProduct error:', err);
+        const token = await getAuthToken();
+        if (token) {
+          const res = await fetch(`/api/admin/products?id=${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const resData = await res.json();
+          if (!res.ok || !resData.success) {
+            setProducts(previousProducts);
+            invalidateCatalogCache();
+            return { success: false, message: resData.error || 'فشل مسح المنتج من الخادم' };
+          }
+        } else {
+          await supabase.from('product_categories').delete().eq('product_id', id);
+          await supabase.from('product_model_matrix').delete().eq('product_id', id);
+          const { error } = await supabase.from('products').delete().eq('id', id);
+          if (error) {
+            setProducts(previousProducts);
+            invalidateCatalogCache();
+            return { success: false, message: error.message };
+          }
+        }
+      } catch (err: unknown) {
+        setProducts(previousProducts);
+        invalidateCatalogCache();
+        return { success: false, message: err instanceof Error ? err.message : 'حدث خطأ أثناء مسح المنتج' };
       }
     }
+
+    return { success: true };
   };
 
   // ==========================================

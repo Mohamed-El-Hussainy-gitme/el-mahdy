@@ -165,7 +165,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
         slug: finalSlug,
         parent_id: parentId,
         icon: icon,
-        image_url: imageUrl.trim() || undefined,
+        image_url: imageUrl.trim() ? imageUrl.trim() : null,
         sort_order: Number(sortOrder) || 1,
       });
     } else {
@@ -174,7 +174,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
         slug: finalSlug,
         parent_id: parentId,
         icon: icon,
-        image_url: imageUrl.trim() || undefined,
+        image_url: imageUrl.trim() ? imageUrl.trim() : undefined,
         sort_order: Number(sortOrder) || categories.length + 1,
         is_active: true,
       });
