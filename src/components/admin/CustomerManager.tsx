@@ -20,10 +20,12 @@ import { UserProfile, UserRole } from '@/types';
 
 interface CustomerManagerProps {
   currentRole: UserRole;
+  staffProfile?: UserProfile | null;
 }
 
-export function CustomerManager({ currentRole }: CustomerManagerProps) {
+export function CustomerManager({ currentRole, staffProfile }: CustomerManagerProps) {
   const { customers, orders, assignCustomerSalesRep, staffSession, staffMembers } = useStore();
+  const effectiveProfile = staffProfile || staffSession;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRepFilter, setSelectedRepFilter] = useState<string>('all');
   const [editingCustomer, setEditingCustomer] = useState<string | null>(null);
@@ -69,8 +71,8 @@ export function CustomerManager({ currentRole }: CustomerManagerProps) {
     return map;
   }, [orders]);
 
-  const isAdmin = currentRole === 'admin';
-  const isSalesAgent = currentRole === 'sales_agent';
+  const isAdmin = currentRole === 'admin' || !!effectiveProfile?.custom_role?.can_manage_customers;
+  const isSalesAgent = !isAdmin && (currentRole === 'sales_agent' || !!effectiveProfile?.custom_role?.can_receive_customers);
 
   const filteredCustomers = useMemo(() => {
     return customers.filter((c) => {

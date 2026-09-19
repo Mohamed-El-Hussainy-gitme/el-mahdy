@@ -14,19 +14,20 @@ import { Order, OrderItem, OrderStatus, UserProfile, UserRole } from '@/types';
 export function canTransitionOrder(
   fromStatus: OrderStatus,
   toStatus: OrderStatus,
-  role: UserRole
+  role: UserRole,
+  profile?: UserProfile | null
 ): { allowed: boolean; reason?: string } {
   if (fromStatus === toStatus) {
     return { allowed: false, reason: 'الطلب في هذه الحالة بالفعل.' };
   }
 
-  // Admin has full override permissions
-  if (role === 'admin') {
+  // Admin or custom role with can_manage_orders has full override permissions
+  if (role === 'admin' || profile?.custom_role?.can_manage_orders) {
     return { allowed: true };
   }
 
-  // Sales Agent transitions
-  if (role === 'sales_agent') {
+  // Sales Agent (or custom role with can_receive_customers) transitions
+  if (role === 'sales_agent' || profile?.custom_role?.can_receive_customers) {
     if (fromStatus === 'pending' && (toStatus === 'preparation' || toStatus === 'returned')) {
       return { allowed: true };
     }
@@ -59,17 +60,17 @@ export function canTransitionOrder(
 
 /**
  * Filters visible orders according to RBAC role:
- * - Admin: Sees all orders.
- * - Sales Agent: Sees orders where assigned or unassigned pending orders.
+ * - Admin or custom role with can_manage_orders: Sees all orders.
+ * - Sales Agent (or can_receive_customers): Sees orders where assigned or unassigned pending orders.
  * - Warehouse Preparer: Sees orders in 'preparation' or 'shipping' only.
  * - Customer: Sees their own orders only.
  */
 export function filterOrdersForRole(orders: Order[], user: UserProfile): Order[] {
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || user.custom_role?.can_manage_orders) {
     return orders;
   }
 
-  if (user.role === 'sales_agent') {
+  if (user.role === 'sales_agent' || user.custom_role?.can_receive_customers) {
     return orders.filter(
       (order) => !order.sales_agent_id || order.sales_agent_id === user.id
     );

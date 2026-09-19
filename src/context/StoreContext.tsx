@@ -1407,7 +1407,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // 1. Fetch profile linked to this auth user
       let { data: profile } = await supabase
         .from('user_profiles')
-        .select('*')
+        .select('*, custom_role:custom_roles(*)')
         .eq('auth_user_id', authData.user.id)
         .maybeSingle();
 
@@ -1415,7 +1415,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!profile) {
         const { data: emailProfile } = await supabase
           .from('user_profiles')
-          .select('*')
+          .select('*, custom_role:custom_roles(*)')
           .eq('email', emailForAuth)
           .maybeSingle();
 

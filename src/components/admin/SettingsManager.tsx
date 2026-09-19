@@ -19,13 +19,15 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { UserRole, StoreSettings } from '@/types';
+import { UserRole, UserProfile, StoreSettings } from '@/types';
+import { canManageSettings } from '@/services/authService';
 
 interface SettingsManagerProps {
   currentRole: UserRole;
+  staffProfile?: UserProfile | null;
 }
 
-export function SettingsManager({ currentRole }: SettingsManagerProps) {
+export function SettingsManager({ currentRole, staffProfile }: SettingsManagerProps) {
   const { storeSettings, updateStoreSettings, refreshData, isLoading } = useStore();
   const [formState, setFormState] = useState<StoreSettings>(storeSettings);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -62,7 +64,7 @@ export function SettingsManager({ currentRole }: SettingsManagerProps) {
     setIsRefreshing(false);
   };
 
-  if (currentRole !== 'admin') {
+  if (!canManageSettings(currentRole, staffProfile)) {
     return (
       <div className="p-8 text-center text-slate-500">
         <AlertCircle className="w-12 h-12 mx-auto mb-3 text-slate-300" />

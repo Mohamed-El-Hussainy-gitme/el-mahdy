@@ -21,7 +21,7 @@ import {
   Image as ImageIcon,
   Loader2,
 } from 'lucide-react';
-import { Product, Category, UserRole } from '@/types';
+import { Product, Category, UserRole, UserProfile } from '@/types';
 import { validateProductData, calculateMatrixStockSummary } from '@/services/productService';
 import { canManageProducts } from '@/services/authService';
 import { uploadProductImage } from '@/lib/storage';
@@ -30,6 +30,7 @@ interface ProductManagerProps {
   products: Product[];
   categories: Category[];
   currentRole: UserRole;
+  staffProfile?: UserProfile | null;
   onAddProduct: (product: any) => void | Promise<any>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => void | Promise<void>;
   onDeleteProduct: (id: string) => any;
@@ -40,6 +41,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
   products,
   categories,
   currentRole,
+  staffProfile,
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
@@ -69,7 +71,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
   const galleryFileInputRef = React.useRef<HTMLInputElement>(null);
   const csvInputRef = React.useRef<HTMLInputElement>(null);
 
-  const isAdmin = canManageProducts(currentRole);
+  const isAdmin = canManageProducts(currentRole, staffProfile);
 
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return products;

@@ -30,7 +30,7 @@ import {
   Image as ImageIcon,
   Loader2,
 } from 'lucide-react';
-import { Category, Product, UserRole } from '@/types';
+import { Category, Product, UserRole, UserProfile } from '@/types';
 import { validateCategoryDeletion } from '@/services/categoryService';
 import { canManageCategories } from '@/services/authService';
 import { uploadImage } from '@/lib/storage';
@@ -81,6 +81,7 @@ interface CategoryTreeManagerProps {
   categoriesTree: Category[];
   products?: Product[];
   currentRole: UserRole;
+  staffProfile?: UserProfile | null;
   onAddCategory: (category: Omit<Category, 'id' | 'created_at' | 'updated_at'>) => void | Promise<void>;
   onUpdateCategory: (id: string, updates: Partial<Category>) => void | Promise<void>;
   onDeleteCategory: (id: string) => { success: boolean; message?: string } | Promise<{ success: boolean; message?: string }>;
@@ -91,6 +92,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
   categoriesTree,
   products,
   currentRole,
+  staffProfile,
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
@@ -107,7 +109,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const isAdmin = canManageCategories(currentRole);
+  const isAdmin = canManageCategories(currentRole, staffProfile);
 
   const toggleCollapse = (id: string) => {
     setCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));

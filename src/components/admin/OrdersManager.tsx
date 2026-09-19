@@ -84,7 +84,7 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
   }, [roleAccessibleOrders, statusFilter, searchQuery]);
 
   const handleTransition = (order: Order, targetStatus: OrderStatus) => {
-    const transitionCheck = canTransitionOrder(order.status, targetStatus, staffSession.role);
+    const transitionCheck = canTransitionOrder(order.status, targetStatus, staffSession.role, staffSession);
     if (!transitionCheck.allowed) {
       alert(transitionCheck.reason || 'لا يمكنك تغيير حالة هذا الطلب.');
       return;
@@ -145,7 +145,7 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
             <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
               <Truck className="w-6 h-6 text-[#0099DD]" />
               <span>
-                {staffSession.role === 'sales_agent'
+                {staffSession.role === 'sales_agent' || (!staffSession.custom_role?.can_manage_orders && staffSession.custom_role?.can_receive_customers)
                   ? `طلبات عملائي ومتابعة المبيعات (${filteredOrders.length})`
                   : (staffSession.role as string) === 'warehouse_preparer' || (staffSession.role as string) === 'warehouse'
                   ? `أوامر التجهيز والشحن بالمستودع (${filteredOrders.length})`
@@ -153,7 +153,7 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
               </span>
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              {staffSession.role === 'sales_agent'
+              {staffSession.role === 'sales_agent' || (!staffSession.custom_role?.can_manage_orders && staffSession.custom_role?.can_receive_customers)
                 ? 'مراجعة طلبات عملائك، تأكيدها ونقلها إلى التجهيز، أو المطالبة بالطلبات المعلقة.'
                 : (staffSession.role as string) === 'warehouse_preparer' || (staffSession.role as string) === 'warehouse'
                 ? 'تجهيز بضائع الطلبات، طباعة إذن الصرف وفاتورة التسليم، وتسجيل شركة الشحن والبوليصة.'
@@ -194,7 +194,7 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
                 { id: 'shipping', label: '2. شحنات قيد التوصيل' },
               ]
             : [
-                { id: 'all', label: staffSession.role === 'sales_agent' ? 'كل طلباتي' : 'كل الطلبات' },
+                { id: 'all', label: (staffSession.role === 'sales_agent' || (!staffSession.custom_role?.can_manage_orders && staffSession.custom_role?.can_receive_customers)) ? 'كل طلباتي' : 'كل الطلبات' },
                 { id: 'pending', label: '1. قيد المراجعة' },
                 { id: 'preparation', label: '2. جاري التجهيز' },
                 { id: 'shipping', label: '3. تم الشحن' },
@@ -299,7 +299,7 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
                           <span className={`font-semibold ${order.sales_agent_name ? 'text-slate-800' : 'text-amber-600 font-bold'}`}>
                             {order.sales_agent_name || 'غير مخصص بعد'}
                           </span>
-                          {!order.sales_agent_id && (staffSession.role === 'sales_agent' || staffSession.role === 'admin') && (
+                          {!order.sales_agent_id && (staffSession.role === 'sales_agent' || staffSession.role === 'admin' || staffSession.custom_role?.can_receive_customers || staffSession.custom_role?.can_manage_orders) && (
                             <button
                               type="button"
                               onClick={async () => {

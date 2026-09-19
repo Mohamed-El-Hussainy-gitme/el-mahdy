@@ -3,6 +3,7 @@
 import React from 'react';
 import { useStore } from '@/context/StoreContext';
 import { CategoryTreeManager } from '@/components/admin/CategoryTreeManager';
+import { canManageCategories } from '@/services/authService';
 
 export default function AdminCategoriesPage() {
   const {
@@ -15,7 +16,7 @@ export default function AdminCategoriesPage() {
     deleteCategory,
   } = useStore();
 
-  if (!staffSession || staffSession.role !== 'admin') return null;
+  if (!staffSession || !canManageCategories(staffSession.role, staffSession)) return null;
 
   return (
     <CategoryTreeManager
@@ -23,6 +24,7 @@ export default function AdminCategoriesPage() {
       categoriesTree={categoriesTree}
       products={products}
       currentRole={staffSession.role}
+      staffProfile={staffSession}
       onAddCategory={addCategory}
       onUpdateCategory={updateCategory}
       onDeleteCategory={deleteCategory}

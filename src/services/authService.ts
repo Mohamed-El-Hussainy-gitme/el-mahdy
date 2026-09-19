@@ -127,11 +127,11 @@ export function getAllowedAdminRoutes(role: UserRole | undefined, profile?: User
   if (profile?.custom_role) {
     const cr = profile.custom_role;
     const routes = ['/admin'];
-    if (cr.can_manage_orders) routes.push('/admin/orders');
+    if (cr.can_manage_orders || cr.can_receive_customers) routes.push('/admin/orders');
     if (cr.can_manage_products) routes.push('/admin/products');
     if (cr.can_manage_categories) routes.push('/admin/categories');
     if (cr.can_manage_matrix) routes.push('/admin/matrix');
-    if (cr.can_manage_customers) routes.push('/admin/customers');
+    if (cr.can_manage_customers || cr.can_receive_customers) routes.push('/admin/customers');
     if (cr.can_manage_shortages) routes.push('/admin/shortages');
     if (cr.can_manage_settings) routes.push('/admin/settings');
     return routes;
