@@ -18,6 +18,9 @@ import {
   ReturnReason,
   StoreSettings,
   CustomRole,
+  AssignmentType,
+  SalesRepAssignment,
+  SalesRepPerformanceReport,
 } from '@/types';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildCategoryTree, validateCategoryDeletion } from '@/services/categoryService';
@@ -190,14 +193,16 @@ interface StoreContextType {
   currentUser: UserProfile | null;
   setCurrentUser: (user: UserProfile | null) => void;
   loginCustomer: (phone: string) => Promise<{ success: boolean; message?: string; user?: UserProfile }>;
-  registerCustomer: (name: string, phone: string, company?: string, address?: string) => Promise<{ success: boolean; message?: string; user?: UserProfile }>;
+  registerCustomer: (name: string, phone: string, company?: string, address?: string, preferredSalesRepId?: string) => Promise<{ success: boolean; message?: string; user?: UserProfile }>;
   fetchCustomerOrders: (customerId?: string, phone?: string) => Promise<void>;
   logout: () => void;
   assignedSalesAgent: UserProfile;
   customers: UserProfile[];
   staffMembers: UserProfile[];
-  assignCustomerSalesRep: (customerId: string, salesRepId: string) => Promise<void>;
+  salesRepAssignments: SalesRepAssignment[];
+  assignCustomerSalesRep: (customerId: string, salesRepId: string, notes?: string, reassignPendingOrders?: boolean) => Promise<{ success: boolean; message?: string }>;
   getLeastLoadedSalesRep: () => UserProfile | null;
+  getSalesRepPerformanceReports: () => SalesRepPerformanceReport[];
 
   // Custom Roles & Permissions Management (Admin)
   customRoles: CustomRole[];
@@ -256,6 +261,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [customers, setCustomers] = useState<UserProfile[]>([]);
   const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
   const [customRoles, setCustomRoles] = useState<CustomRole[]>(DEFAULT_CUSTOM_ROLES);
+  const [salesRepAssignments, setSalesRepAssignments] = useState<SalesRepAssignment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Filters
@@ -335,6 +341,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       const savedWish = localStorage.getItem('mh_mahdy_wishlist');
       if (savedWish) setWishlist(JSON.parse(savedWish));
+
+      const savedAssignments = localStorage.getItem('mh_mahdy_rep_assignments');
+      if (savedAssignments) setSalesRepAssignments(JSON.parse(savedAssignments));
     } catch (e) {
       console.warn('Storage read warning:', e);
     }
@@ -649,6 +658,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .order('created_at', { ascending: true });
       if (dbRoles && dbRoles.length > 0) {
         setCustomRoles(dbRoles as CustomRole[]);
+      }
+
+      // Sales Rep Assignments Data Log
+      const { data: dbAssignments } = await supabase
+        .from('sales_rep_assignments')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (dbAssignments) {
+        setSalesRepAssignments(dbAssignments as SalesRepAssignment[]);
+        try { localStorage.setItem('mh_mahdy_rep_assignments', JSON.stringify(dbAssignments)); } catch {}
       }
 
       // Inventory Adjustments
@@ -1704,7 +1723,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Customer Auth — Separated Register (Secured via sp_customer_register RPC)
-  const registerCustomer = async (name: string, phone: string, company?: string, _address?: string): Promise<{ success: boolean; message?: string; user?: UserProfile }> => {
+  const registerCustomer = async (
+    name: string,
+    phone: string,
+    company?: string,
+    _address?: string,
+    preferredSalesRepId?: string
+  ): Promise<{ success: boolean; message?: string; user?: UserProfile }> => {
     const cleanName = name.trim();
     const cleanPhone = normalizeEgyptianPhone(phone);
     const cleanCompany = company?.trim() || undefined;
@@ -1718,16 +1743,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    // Auto least-loaded sales rep assignment
+    // Check if user selected a preferred sales rep from staff
+    const chosenRep = preferredSalesRepId
+      ? staffMembers.find((s) => s.id === preferredSalesRepId && s.is_active !== false)
+      : null;
+
+    // Auto least-loaded sales rep assignment fallback
     const leastRep = getLeastLoadedSalesRep();
+    const targetRep = chosenRep || leastRep;
+    const assignmentType = chosenRep ? 'customer_choice' : 'auto_fair_distribution';
+    const assignmentNotes = chosenRep
+      ? 'طلب العميل هذا المندوب مباشرة عند التسجيل'
+      : 'توزيع تلقائي عادل (المندوب الأقل تشغيلاً)';
 
     if (isSupabaseConfigured()) {
       try {
-        // Use atomic secure registration RPC
+        // Use atomic secure registration RPC with optional preferred sales rep
         const { data: rpcRes, error: rpcErr } = await supabase.rpc('sp_customer_register', {
           p_name: cleanName,
           p_phone: cleanPhone,
           p_company: cleanCompany || null,
+          p_sales_rep_id: chosenRep ? chosenRep.id : null,
         });
 
         if (!rpcErr && rpcRes) {
@@ -1741,12 +1777,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             phone: u.phone,
             company_name: u.company_name,
             role: 'customer',
-            assigned_sales_rep_id: u.assigned_sales_rep_id || leastRep?.id || undefined,
-            assigned_sales_rep_name: u.assigned_sales_rep_name || leastRep?.full_name || undefined,
-            assigned_sales_rep_phone: u.assigned_sales_rep_phone || leastRep?.phone || undefined,
+            assigned_sales_rep_id: u.assigned_sales_rep_id || targetRep?.id || undefined,
+            assigned_sales_rep_name: u.assigned_sales_rep_name || targetRep?.full_name || undefined,
+            assigned_sales_rep_phone: u.assigned_sales_rep_phone || targetRep?.phone || undefined,
+            assignment_type: (u.assignment_type as AssignmentType) || assignmentType,
           };
           setCurrentUser(userProfile);
           try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
+
+          // Record assignment in local assignments log
+          const newAssignmentLog: SalesRepAssignment = {
+            id: generateUUID(),
+            customer_id: u.id,
+            customer_name: cleanName,
+            customer_phone: cleanPhone,
+            customer_company: cleanCompany,
+            sales_rep_id: targetRep?.id,
+            sales_rep_name: targetRep?.full_name,
+            assignment_type: assignmentType,
+            notes: assignmentNotes,
+            created_at: new Date().toISOString(),
+          };
+          setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
+
           return { success: true, user: userProfile };
         }
 
@@ -1771,12 +1824,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             phone: cleanPhone,
             company_name: cleanCompany,
             role: 'customer',
-            assigned_sales_rep_id: leastRep?.id || null,
+            assigned_sales_rep_id: targetRep?.id || null,
           }, { onConflict: 'phone' })
           .select()
           .maybeSingle();
 
         if (error) throw error;
+
+        // Log into sales_rep_assignments
+        await supabase.from('sales_rep_assignments').insert({
+          customer_id: newId,
+          customer_name: cleanName,
+          customer_phone: cleanPhone,
+          customer_company: cleanCompany || null,
+          sales_rep_id: targetRep?.id || null,
+          sales_rep_name: targetRep?.full_name || null,
+          assignment_type: assignmentType,
+          notes: assignmentNotes,
+        });
+
+        const newAssignmentLog: SalesRepAssignment = {
+          id: generateUUID(),
+          customer_id: newId,
+          customer_name: cleanName,
+          customer_phone: cleanPhone,
+          customer_company: cleanCompany,
+          sales_rep_id: targetRep?.id,
+          sales_rep_name: targetRep?.full_name,
+          assignment_type: assignmentType,
+          notes: assignmentNotes,
+          created_at: new Date().toISOString(),
+        };
+        setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
 
         const userProfile: UserProfile = {
           id: created?.id || newId,
@@ -1784,9 +1863,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           phone: cleanPhone,
           company_name: cleanCompany,
           role: 'customer',
-          assigned_sales_rep_id: leastRep?.id,
-          assigned_sales_rep_name: leastRep?.full_name,
-          assigned_sales_rep_phone: leastRep?.phone,
+          assigned_sales_rep_id: targetRep?.id,
+          assigned_sales_rep_name: targetRep?.full_name,
+          assigned_sales_rep_phone: targetRep?.phone,
+          assignment_type: assignmentType,
         };
         setCurrentUser(userProfile);
         try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
@@ -1804,12 +1884,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       phone: cleanPhone,
       company_name: cleanCompany,
       role: 'customer',
-      assigned_sales_rep_id: leastRep?.id,
-      assigned_sales_rep_name: leastRep?.full_name,
-      assigned_sales_rep_phone: leastRep?.phone,
+      assigned_sales_rep_id: targetRep?.id,
+      assigned_sales_rep_name: targetRep?.full_name,
+      assigned_sales_rep_phone: targetRep?.phone,
+      assignment_type: assignmentType,
     };
     setCurrentUser(userProfile);
     try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
+
+    const newAssignmentLog: SalesRepAssignment = {
+      id: generateUUID(),
+      customer_id: userProfile.id,
+      customer_name: cleanName,
+      customer_phone: cleanPhone,
+      customer_company: cleanCompany,
+      sales_rep_id: targetRep?.id,
+      sales_rep_name: targetRep?.full_name,
+      assignment_type: assignmentType,
+      notes: assignmentNotes,
+      created_at: new Date().toISOString(),
+    };
+    setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
+
     return { success: true, user: userProfile };
   };
 
@@ -2113,30 +2209,114 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Reassign / Assign Sticky Sales Rep directly (CRM — Admin only action, bypasses First-Touch protection)
-  const assignCustomerSalesRep = async (customerId: string, salesRepId: string) => {
+  // Reassign / Assign Sticky Sales Rep directly (CRM — Admin only action, with Data Log recording)
+  const assignCustomerSalesRep = async (
+    customerId: string,
+    salesRepId: string,
+    notes?: string,
+    reassignPendingOrders: boolean = true
+  ): Promise<{ success: boolean; message?: string }> => {
+    const customer = customers.find((c) => c.id === customerId);
+    const oldRep = staffMembers.find((s) => s.id === customer?.assigned_sales_rep_id);
+    const newRep = staffMembers.find((s) => s.id === salesRepId);
+
+    // Update customer in local state
     setCustomers((prev) =>
-      prev.map((c) => (c.id === customerId ? { ...c, assigned_sales_rep_id: salesRepId } : c))
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              assigned_sales_rep_id: salesRepId,
+              assigned_sales_rep_name: newRep?.full_name,
+              assigned_sales_rep_phone: newRep?.phone,
+              assignment_type: 'admin_transfer',
+            }
+          : c
+      )
     );
+
+    // Update pending orders for this customer in local state
+    if (reassignPendingOrders) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.customer_id === customerId && o.status === 'pending'
+            ? {
+                ...o,
+                sales_agent_id: salesRepId,
+                sales_agent_name: newRep?.full_name,
+                sales_agent_phone: newRep?.phone,
+              }
+            : o
+        )
+      );
+    }
+
+    // Add assignment record to local data log
+    const newAssignmentLog: SalesRepAssignment = {
+      id: generateUUID(),
+      customer_id: customerId,
+      customer_name: customer?.full_name || 'عميل',
+      customer_phone: customer?.phone || '',
+      customer_company: customer?.company_name,
+      sales_rep_id: salesRepId,
+      sales_rep_name: newRep?.full_name,
+      previous_rep_id: oldRep?.id,
+      previous_rep_name: oldRep?.full_name,
+      assignment_type: 'admin_transfer',
+      notes: notes || 'تحويل إداري من لوحة التحكم',
+      assigned_by: staffSession?.id,
+      assigned_by_name: staffSession?.full_name,
+      created_at: new Date().toISOString(),
+    };
+    setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
+
     if (isSupabaseConfigured()) {
       try {
-        // p_force: true allows admin to override existing sticky rep (First-Touch protection bypassed)
-        const { error } = await supabase.rpc('sp_assign_sticky_sales_rep', {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('sp_admin_transfer_customer_rep', {
           p_customer_id: customerId,
-          p_sales_agent_id: salesRepId,
-          p_force: true,
+          p_new_rep_id: salesRepId,
+          p_notes: notes || null,
+          p_admin_id: staffSession?.id || null,
+          p_reassign_pending_orders: reassignPendingOrders,
         });
-        if (error) {
+
+        if (rpcErr) {
+          console.warn('sp_admin_transfer_customer_rep failed, falling back to direct updates:', rpcErr);
           await supabase
             .from('user_profiles')
-            .update({ assigned_sales_rep_id: salesRepId })
+            .update({ assigned_sales_rep_id: salesRepId, updated_at: new Date().toISOString() })
             .eq('id', customerId);
+
+          if (reassignPendingOrders) {
+            await supabase
+              .from('orders')
+              .update({ sales_agent_id: salesRepId })
+              .eq('customer_id', customerId)
+              .eq('status', 'pending');
+          }
+
+          await supabase.from('sales_rep_assignments').insert({
+            customer_id: customerId,
+            customer_name: customer?.full_name || 'عميل',
+            customer_phone: customer?.phone || '',
+            customer_company: customer?.company_name || null,
+            sales_rep_id: salesRepId,
+            sales_rep_name: newRep?.full_name || null,
+            previous_rep_id: oldRep?.id || null,
+            previous_rep_name: oldRep?.full_name || null,
+            assignment_type: 'admin_transfer',
+            notes: notes || 'تحويل إداري من لوحة التحكم',
+            assigned_by: staffSession?.id || null,
+            assigned_by_name: staffSession?.full_name || null,
+          });
         }
       } catch (err) {
         console.warn('assignCustomerSalesRep error:', err);
       }
       await refreshData();
     }
+
+    return { success: true, message: 'تم تحويل العميل بنجاح وتوثيق الحركة في سجل العمليات' };
   };
 
   // Automatic Least-Loaded Sales Rep (Equal Opportunities Distribution)
@@ -2178,6 +2358,66 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     return minRep;
   }, [staffMembers, customers, customRoles]);
+
+  // Aggregate Comprehensive Performance Reports for all sales reps
+  const getSalesRepPerformanceReports = useCallback((): SalesRepPerformanceReport[] => {
+    const eligibleReps = staffMembers.filter((s) => {
+      if (s.is_active === false) return false;
+      if (s.role === 'sales_agent') return true;
+      if (s.custom_role?.can_receive_customers) return true;
+      const cRole = customRoles.find((r) => r.id === s.custom_role_id);
+      if (cRole?.can_receive_customers) return true;
+      return s.role === 'admin';
+    });
+
+    const totalAssignedCustomersAll = customers.filter((c) => c.assigned_sales_rep_id).length || 1;
+
+    return eligibleReps.map((rep) => {
+      const repCustomers = customers.filter((c) => c.assigned_sales_rep_id === rep.id);
+      const totalCustCount = repCustomers.length;
+
+      const repAssignments = salesRepAssignments.filter((a) => a.sales_rep_id === rep.id);
+      const customerChoiceCount = repAssignments.filter((a) => a.assignment_type === 'customer_choice').length;
+      const autoDistributedCount = repAssignments.filter((a) => a.assignment_type === 'auto_fair_distribution').length;
+      const transferredInCount = repAssignments.filter((a) => a.assignment_type === 'admin_transfer').length;
+      const transferredOutCount = salesRepAssignments.filter(
+        (a) => a.previous_rep_id === rep.id && a.assignment_type === 'admin_transfer'
+      ).length;
+
+      const repOrders = orders.filter((o) => o.sales_agent_id === rep.id);
+      const totalOrders = repOrders.length;
+      const pendingOrders = repOrders.filter((o) => o.status === 'pending').length;
+      const deliveredOrders = repOrders.filter((o) => o.status === 'delivered').length;
+      const returnedOrders = repOrders.filter((o) => o.status === 'returned').length;
+      const totalRevenue = repOrders
+        .filter((o) => o.status !== 'returned')
+        .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+      const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+      const conversionRate = totalOrders > 0 ? (deliveredOrders / totalOrders) * 100 : 0;
+      const loadSharePercentage = (totalCustCount / totalAssignedCustomersAll) * 100;
+
+      return {
+        repId: rep.id,
+        repName: rep.full_name,
+        repPhone: rep.phone,
+        role: rep.role,
+        isActive: rep.is_active !== false,
+        totalCustomers: totalCustCount,
+        customerChoiceCount,
+        autoDistributedCount,
+        transferredInCount,
+        transferredOutCount,
+        totalOrders,
+        pendingOrders,
+        deliveredOrders,
+        returnedOrders,
+        totalRevenue,
+        averageOrderValue,
+        conversionRate,
+        loadSharePercentage,
+      };
+    });
+  }, [staffMembers, customRoles, customers, salesRepAssignments, orders]);
 
   // Custom Roles & Permissions Management (Admin)
   const addCustomRole = async (newRole: Omit<CustomRole, 'id' | 'created_at' | 'updated_at'>) => {
@@ -2406,8 +2646,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         assignedSalesAgent,
         customers,
         staffMembers,
+        salesRepAssignments,
         assignCustomerSalesRep,
         getLeastLoadedSalesRep,
+        getSalesRepPerformanceReports,
 
         customRoles,
         addCustomRole,

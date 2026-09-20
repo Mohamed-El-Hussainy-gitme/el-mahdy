@@ -126,6 +126,8 @@ export interface Order {
   returned_at?: string;
 }
 
+export type AssignmentType = 'auto_fair_distribution' | 'customer_choice' | 'admin_transfer';
+
 export interface UserProfile {
   id: string;
   auth_user_id?: string;
@@ -140,6 +142,7 @@ export interface UserProfile {
   assigned_sales_rep_id?: string;
   assigned_sales_rep_name?: string;
   assigned_sales_rep_phone?: string;
+  assignment_type?: AssignmentType;
   custom_role_id?: string;
   custom_role_name?: string;
   custom_role?: CustomRole;
@@ -197,5 +200,43 @@ export interface StoreSettings {
   delivery_promise_2?: string;
   delivery_promise_3?: string;
   updated_at?: string;
+}
+
+export interface SalesRepAssignment {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_company?: string;
+  sales_rep_id?: string;
+  sales_rep_name?: string;
+  previous_rep_id?: string;
+  previous_rep_name?: string;
+  assignment_type: AssignmentType;
+  notes?: string;
+  assigned_by?: string;
+  assigned_by_name?: string;
+  created_at: string;
+}
+
+export interface SalesRepPerformanceReport {
+  repId: string;
+  repName: string;
+  repPhone: string;
+  role: string;
+  isActive: boolean;
+  totalCustomers: number;
+  customerChoiceCount: number;
+  autoDistributedCount: number;
+  transferredInCount: number;
+  transferredOutCount: number;
+  totalOrders: number;
+  pendingOrders: number;
+  deliveredOrders: number;
+  returnedOrders: number;
+  totalRevenue: number;
+  averageOrderValue: number;
+  conversionRate: number; // percentage
+  loadSharePercentage: number; // percentage
 }
 

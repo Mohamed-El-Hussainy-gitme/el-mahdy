@@ -38,6 +38,8 @@ export default function UserAccountModal() {
     setAccountModalTab,
     wishlist,
     setIsWishlistOpen,
+    staffMembers,
+    customRoles,
   } = useStore();
 
   // Login form state
@@ -49,8 +51,22 @@ export default function UserAccountModal() {
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regCompany, setRegCompany] = useState('');
+  const [preferredRepMode, setPreferredRepMode] = useState<'auto' | 'custom'>('auto');
+  const [selectedSalesRepId, setSelectedSalesRepId] = useState<string>('');
   const [regError, setRegError] = useState('');
   const [regLoading, setRegLoading] = useState(false);
+
+  // Filter available sales reps for direct customer choice
+  const availableReps = React.useMemo(() => {
+    return staffMembers.filter((s) => {
+      if (s.is_active === false) return false;
+      if (s.role === 'sales_agent') return true;
+      if (s.custom_role?.can_receive_customers) return true;
+      const cRole = customRoles.find((r) => r.id === s.custom_role_id);
+      if (cRole?.can_receive_customers) return true;
+      return s.role === 'admin';
+    });
+  }, [staffMembers, customRoles]);
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
@@ -128,12 +144,15 @@ export default function UserAccountModal() {
     e.preventDefault();
     setRegError('');
     setRegLoading(true);
-    const result = await registerCustomer(regName, regPhone, regCompany);
+    const targetRepId = preferredRepMode === 'custom' && selectedSalesRepId ? selectedSalesRepId : undefined;
+    const result = await registerCustomer(regName, regPhone, regCompany, undefined, targetRepId);
     setRegLoading(false);
     if (result.success) {
       setRegName('');
       setRegPhone('');
       setRegCompany('');
+      setPreferredRepMode('auto');
+      setSelectedSalesRepId('');
       setAccountModalTab('menu');
     } else {
       setRegError(result.message || 'حدث خطأ، يرجى المحاولة مرة أخرى');
@@ -458,6 +477,81 @@ export default function UserAccountModal() {
                   placeholder="مثال: محل المهدي للاتصالات"
                   className={inputCls}
                 />
+              </div>
+
+              {/* Sales Representative Preference */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    مندوب المبيعات المسؤول
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-normal">اختياري</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreferredRepMode('auto');
+                      setSelectedSalesRepId('');
+                    }}
+                    className={`p-2.5 rounded-xl border text-right transition flex flex-col justify-between cursor-pointer ${
+                      preferredRepMode === 'auto'
+                        ? 'border-[#0099DD] bg-sky-50/70 text-[#0099DD] ring-1 ring-[#0099DD]'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${preferredRepMode === 'auto' ? 'bg-[#0099DD]' : 'bg-slate-300'}`} />
+                      بدون مندوب محدد
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-1">توزيع عادل وتعيين فوري</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreferredRepMode('custom');
+                      if (!selectedSalesRepId && availableReps.length > 0) {
+                        setSelectedSalesRepId(availableReps[0].id);
+                      }
+                    }}
+                    className={`p-2.5 rounded-xl border text-right transition flex flex-col justify-between cursor-pointer ${
+                      preferredRepMode === 'custom'
+                        ? 'border-[#0099DD] bg-sky-50/70 text-[#0099DD] ring-1 ring-[#0099DD]'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${preferredRepMode === 'custom' ? 'bg-[#0099DD]' : 'bg-slate-300'}`} />
+                      طلب مندوب معين
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-1">اختيار المندوب بالاسم</span>
+                  </button>
+                </div>
+
+                {preferredRepMode === 'custom' && (
+                  <div className="mt-2 space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <label className="block text-[11px] font-semibold text-slate-600">
+                      قائمة المناديب المعتمدين:
+                    </label>
+                    <select
+                      value={selectedSalesRepId}
+                      onChange={(e) => setSelectedSalesRepId(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 font-medium focus:outline-none focus:border-[#0099DD] focus:ring-1 focus:ring-[#0099DD]/30 cursor-pointer"
+                    >
+                      {availableReps.length === 0 ? (
+                        <option value="">لا يوجد مناديب متاحين حالياً (سيتم التوزيع تلقائياً)</option>
+                      ) : (
+                        availableReps.map((rep) => (
+                          <option key={rep.id} value={rep.id}>
+                            {rep.full_name} {rep.phone ? `(${rep.phone})` : ''}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {regError && (
