@@ -272,12 +272,12 @@ begin
 end;
 $func$;
 
--- ── 5. Allow Public/Customer to Read Active Sales Reps ───────────────────────
+-- ── 5. Allow Public/Customer to Read Active Sales Reps & Custom Roles ─────────
 drop policy if exists "Public can read active sales reps" on public.user_profiles;
 create policy "Public can read active sales reps"
   on public.user_profiles for select
   using (
-    is_active = true
+    coalesce(is_active, true) = true
     and (
       role in ('sales_agent', 'admin')
       or exists (
@@ -287,6 +287,14 @@ create policy "Public can read active sales reps"
       )
     )
   );
+
+-- Allow public and customers to read custom_roles table so joined queries don't fail under RLS
+drop policy if exists "Anyone can view custom roles" on public.custom_roles;
+create policy "Anyone can view custom roles"
+  on public.custom_roles for select
+  using (true);
+
+grant select on public.custom_roles to authenticated, anon;
 
 -- ── 6. RPC: sp_get_active_sales_reps (Security Definer) ───────────────────────
 create or replace function public.sp_get_active_sales_reps()
@@ -309,13 +317,14 @@ as $func$
     cr.name_ar as custom_role_name
   from public.user_profiles up
   left join public.custom_roles cr on up.custom_role_id = cr.id
-  where up.is_active = true
+  where coalesce(up.is_active, true) = true
     and (
       up.role in ('sales_agent', 'admin')
       or cr.can_receive_customers = true
     )
   order by up.full_name asc;
 $func$;
+
 
 -- ── 7. RPC: sp_customer_choose_sales_rep (Security Definer) ───────────────────
 create or replace function public.sp_customer_choose_sales_rep(

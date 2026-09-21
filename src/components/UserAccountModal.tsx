@@ -63,6 +63,7 @@ export default function UserAccountModal() {
       if (s.is_active === false) return false;
       if (s.role === 'sales_agent') return true;
       if (s.custom_role?.can_receive_customers) return true;
+      if (s.custom_role_name) return true;
       const cRole = customRoles.find((r) => r.id === s.custom_role_id);
       if (cRole?.can_receive_customers) return true;
       return s.role === 'admin';
@@ -71,8 +72,16 @@ export default function UserAccountModal() {
     return [DEFAULT_STICKY_SALES_REP];
   }, [staffMembers, customRoles]);
 
+  // Auto-select first available sales rep when switching to custom mode
+  React.useEffect(() => {
+    if (preferredRepMode === 'custom' && !selectedSalesRepId && availableReps.length > 0) {
+      setSelectedSalesRepId(availableReps[0].id);
+    }
+  }, [preferredRepMode, selectedSalesRepId, availableReps]);
+
   // State for logged-in user changing sales rep
   const [isChangingRep, setIsChangingRep] = useState(false);
+
   const [changeRepMode, setChangeRepMode] = useState<'auto' | 'custom'>('custom');
   const [changeRepSelectedId, setChangeRepSelectedId] = useState<string>('');
   const [changeRepLoading, setChangeRepLoading] = useState(false);

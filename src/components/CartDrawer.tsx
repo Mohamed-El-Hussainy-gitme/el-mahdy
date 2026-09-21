@@ -55,6 +55,7 @@ export default function CartDrawer() {
       if (s.is_active === false) return false;
       if (s.role === 'sales_agent') return true;
       if (s.custom_role?.can_receive_customers) return true;
+      if (s.custom_role_name) return true;
       const cRole = customRoles.find((r) => r.id === s.custom_role_id);
       if (cRole?.can_receive_customers) return true;
       return s.role === 'admin';

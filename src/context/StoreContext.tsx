@@ -673,15 +673,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       // Staff Members List (Admin, Sales, Warehouse, or any custom role staff)
       let staffList: UserProfile[] = [];
-      const { data: dbStaff } = await supabase
-        .from('user_profiles')
-        .select('*, custom_role:custom_roles(*)')
-        .neq('role', 'customer')
-        .order('created_at', { ascending: true });
-      if (dbStaff && dbStaff.length > 0) {
-        staffList = dbStaff as UserProfile[];
-      } else {
-        // Fallback for public/customer context: call sp_get_active_sales_reps RPC
+      try {
+        const { data: dbStaff, error: dbStaffErr } = await supabase
+          .from('user_profiles')
+          .select('*, custom_role:custom_roles(*)')
+          .neq('role', 'customer')
+          .order('created_at', { ascending: true });
+        if (dbStaff && dbStaff.length > 0) {
+          staffList = dbStaff as UserProfile[];
+        }
+      } catch {}
+
+      // Fallback 1: Plain query without join in case custom_roles RLS prevents joined select
+      if (staffList.length === 0) {
+        try {
+          const { data: plainStaff } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .neq('role', 'customer')
+            .order('created_at', { ascending: true });
+          if (plainStaff && plainStaff.length > 0) {
+            staffList = plainStaff as UserProfile[];
+          }
+        } catch {}
+      }
+
+      // Fallback 2: Security Definer RPC for public/customer context
+      if (staffList.length === 0) {
         try {
           const { data: rpcStaff } = await supabase.rpc('sp_get_active_sales_reps');
           if (rpcStaff && rpcStaff.length > 0) {
@@ -689,8 +707,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               id: s.id,
               full_name: s.full_name,
               phone: s.phone,
-              role: s.role,
+              role: s.role || 'sales_agent',
               custom_role_name: s.custom_role_name,
+              custom_role: { can_receive_customers: true, name_ar: s.custom_role_name } as any,
               is_active: true,
             }));
           }
@@ -703,8 +722,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setStaffMembers(staffList);
         try { localStorage.setItem('mh_mahdy_staff_list', JSON.stringify(staffList)); } catch {}
       } else {
-        setStaffMembers([DEFAULT_STICKY_SALES_REP]);
+        // Fallback 3: check localStorage cache
+        const cachedStaff = typeof window !== 'undefined' ? localStorage.getItem('mh_mahdy_staff_list') : null;
+        if (cachedStaff) {
+          try {
+            const parsed = JSON.parse(cachedStaff);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setStaffMembers(parsed);
+            } else {
+              setStaffMembers([DEFAULT_STICKY_SALES_REP]);
+            }
+          } catch {
+            setStaffMembers([DEFAULT_STICKY_SALES_REP]);
+          }
+        } else {
+          setStaffMembers([DEFAULT_STICKY_SALES_REP]);
+        }
       }
+
 
       // Custom Roles List
       const { data: dbRoles } = await supabase
