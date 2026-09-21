@@ -22,9 +22,16 @@ import {
   Loader2,
   Filter,
   Check,
+  Edit3,
+  Trash2,
+  Plus,
+  RefreshCw,
+  Power,
+  Eye,
+  AlertTriangle,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
-import { UserProfile, UserRole, AssignmentType } from '@/types';
+import { UserProfile, UserRole, AssignmentType, Order } from '@/types';
 
 interface CustomerManagerProps {
   currentRole: UserRole;
@@ -36,6 +43,11 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
     customers,
     orders,
     assignCustomerSalesRep,
+    adminCreateCustomer,
+    adminUpdateCustomer,
+    adminToggleCustomerActive,
+    adminDeleteCustomer,
+    refreshData,
     staffSession,
     staffMembers,
     salesRepAssignments,
@@ -52,6 +64,44 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
   // Customer List Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRepFilter, setSelectedRepFilter] = useState<string>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
+  // Refresh indicator
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshData();
+    setIsRefreshing(false);
+  };
+
+  // Add Customer Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addPhone, setAddPhone] = useState('');
+  const [addCompany, setAddCompany] = useState('');
+  const [addRepId, setAddRepId] = useState('');
+  const [addNotes, setAddNotes] = useState('');
+  const [addLoading, setAddLoading] = useState(false);
+  const [addFeedback, setAddFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Edit Customer Modal State
+  const [editingCustomer, setEditingCustomer] = useState<UserProfile | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editCompany, setEditCompany] = useState('');
+  const [editRepId, setEditRepId] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editNotes, setEditNotes] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [editFeedback, setEditFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Delete Customer State
+  const [deletingCustomer, setDeletingCustomer] = useState<UserProfile | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteFeedback, setDeleteFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // View Customer Orders / Profile State
+  const [viewingCustomer, setViewingCustomer] = useState<UserProfile | null>(null);
 
   // Transfer Modal State
   const [transferCustomer, setTransferCustomer] = useState<UserProfile | null>(null);
@@ -127,9 +177,14 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
         (selectedRepFilter === 'unassigned' && !c.assigned_sales_rep_id) ||
         c.assigned_sales_rep_id === selectedRepFilter;
 
-      return matchSearch && matchRep;
+      const matchStatus =
+        selectedStatusFilter === 'all' ||
+        (selectedStatusFilter === 'active' && c.is_active !== false) ||
+        (selectedStatusFilter === 'inactive' && c.is_active === false);
+
+      return matchSearch && matchRep && matchStatus;
     });
-  }, [customers, searchQuery, selectedRepFilter, isSalesAgent, staffSession]);
+  }, [customers, searchQuery, selectedRepFilter, selectedStatusFilter, isSalesAgent, staffSession]);
 
   // Filtered Logs
   const filteredLogs = useMemo(() => {
@@ -223,6 +278,104 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
     }
   };
 
+  // Add Customer Handlers
+  const handleCreateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addName.trim() || !addPhone.trim()) {
+      setAddFeedback({ type: 'error', message: 'يرجى إدخال اسم العميل ورقم الهاتف' });
+      return;
+    }
+    setAddLoading(true);
+    setAddFeedback(null);
+    const res = await adminCreateCustomer({
+      full_name: addName.trim(),
+      phone: addPhone.trim(),
+      company_name: addCompany.trim() || undefined,
+      sales_rep_id: addRepId || undefined,
+      notes: addNotes.trim() || undefined,
+    });
+    setAddLoading(false);
+    if (res.success) {
+      setAddFeedback({ type: 'success', message: res.message || 'تمت إضافة العميل بنجاح' });
+      setTimeout(() => {
+        setIsAddModalOpen(false);
+        setAddName('');
+        setAddPhone('');
+        setAddCompany('');
+        setAddRepId('');
+        setAddNotes('');
+        setAddFeedback(null);
+      }, 1200);
+    } else {
+      setAddFeedback({ type: 'error', message: res.message || 'فشل إنشاء العميل' });
+    }
+  };
+
+  // Edit Customer Handlers
+  const handleOpenEditModal = (cust: UserProfile) => {
+    setEditingCustomer(cust);
+    setEditName(cust.full_name);
+    setEditPhone(cust.phone);
+    setEditCompany(cust.company_name || '');
+    setEditRepId(cust.assigned_sales_rep_id || '');
+    setEditIsActive(cust.is_active !== false);
+    setEditNotes('');
+    setEditFeedback(null);
+  };
+
+  const handleUpdateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+    if (!editName.trim() || !editPhone.trim()) {
+      setEditFeedback({ type: 'error', message: 'يرجى إدخال اسم العميل ورقم الهاتف' });
+      return;
+    }
+    setEditLoading(true);
+    setEditFeedback(null);
+    const res = await adminUpdateCustomer(editingCustomer.id, {
+      full_name: editName.trim(),
+      phone: editPhone.trim(),
+      company_name: editCompany.trim() || undefined,
+      sales_rep_id: editRepId || undefined,
+      is_active: editIsActive,
+      notes: editNotes.trim() || undefined,
+    });
+    setEditLoading(false);
+    if (res.success) {
+      setEditFeedback({ type: 'success', message: res.message || 'تم تحديث بيانات العميل بنجاح' });
+      setTimeout(() => {
+        setEditingCustomer(null);
+        setEditFeedback(null);
+      }, 1200);
+    } else {
+      setEditFeedback({ type: 'error', message: res.message || 'فشل تحديث بيانات العميل' });
+    }
+  };
+
+  // Toggle Customer Active Status
+  const handleToggleStatus = async (cust: UserProfile) => {
+    const nextState = cust.is_active === false ? true : false;
+    await adminToggleCustomerActive(cust.id, nextState);
+  };
+
+  // Delete Customer Handler
+  const handleConfirmDelete = async () => {
+    if (!deletingCustomer) return;
+    setDeleteLoading(true);
+    setDeleteFeedback(null);
+    const res = await adminDeleteCustomer(deletingCustomer.id);
+    setDeleteLoading(false);
+    if (res.success) {
+      setDeleteFeedback({ type: 'success', message: res.message || 'تم حذف العميل بنجاح' });
+      setTimeout(() => {
+        setDeletingCustomer(null);
+        setDeleteFeedback(null);
+      }, 1200);
+    } else {
+      setDeleteFeedback({ type: 'error', message: res.message || 'فشل حذف العميل' });
+    }
+  };
+
   // Helper badge for assignment types
   const renderAssignmentBadge = (type?: AssignmentType | string) => {
     switch (type) {
@@ -272,18 +425,48 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
             </p>
           </div>
 
-          {/* Quick Summary Pill for Admin */}
-          {isAdmin && (
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
-              <div className="text-slate-600">
-                إجمالي العملاء: <span className="font-bold text-slate-900">{customers.length}</span>
+          {/* Actions & Summary for Admin/Staff */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
+              title="تحديث البيانات من الخادم"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#0099DD] ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'جاري التحديث...' : 'تحديث السجل'}</span>
+            </button>
+
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setIsAddModalOpen(true);
+                  setAddFeedback(null);
+                  setAddName('');
+                  setAddPhone('');
+                  setAddCompany('');
+                  setAddRepId(salesAgents[0]?.id || '');
+                  setAddNotes('');
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0099DD] hover:bg-[#007BB3] text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة عميل جديد</span>
+              </button>
+            )}
+
+            {isAdmin && (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
+                <div className="text-slate-600">
+                  إجمالي العملاء: <span className="font-bold text-slate-900">{customers.length}</span>
+                </div>
+                <span className="text-slate-300">|</span>
+                <div className="text-slate-600">
+                  مناديب نشطين: <span className="font-bold text-[#0099DD]">{salesAgents.length}</span>
+                </div>
               </div>
-              <span className="text-slate-300">|</span>
-              <div className="text-slate-600">
-                مناديب نشطين: <span className="font-bold text-[#0099DD]">{salesAgents.length}</span>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -354,24 +537,39 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
               />
             </div>
 
-            {isAdmin && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 shrink-0">تصفية حسب المندوب:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-500 shrink-0">الحالة:</span>
                 <select
-                  value={selectedRepFilter}
-                  onChange={(e) => setSelectedRepFilter(e.target.value)}
-                  className="px-3 py-2 rounded-xl text-xs border border-slate-300 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#0099DD] cursor-pointer"
+                  value={selectedStatusFilter}
+                  onChange={(e) => setSelectedStatusFilter(e.target.value as any)}
+                  className="px-2.5 py-2 rounded-xl text-xs border border-slate-300 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#0099DD] cursor-pointer"
                 >
-                  <option value="all">كل المناديب ({customers.length})</option>
-                  <option value="unassigned">بدون مندوب معين</option>
-                  {salesAgents.map((sa) => (
-                    <option key={sa.id} value={sa.id}>
-                      {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل)
-                    </option>
-                  ))}
+                  <option value="all">كل الحالات</option>
+                  <option value="active">نشط فقط</option>
+                  <option value="inactive">معطل فقط</option>
                 </select>
               </div>
-            )}
+
+              {isAdmin && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 shrink-0">المندوب:</span>
+                  <select
+                    value={selectedRepFilter}
+                    onChange={(e) => setSelectedRepFilter(e.target.value)}
+                    className="px-2.5 py-2 rounded-xl text-xs border border-slate-300 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#0099DD] cursor-pointer"
+                  >
+                    <option value="all">كل المناديب ({customers.length})</option>
+                    <option value="unassigned">بدون مندوب معين</option>
+                    {salesAgents.map((sa) => (
+                      <option key={sa.id} value={sa.id}>
+                        {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Customers Table */}
@@ -386,7 +584,7 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
                     <th className="p-3.5">طريقة الإسناد</th>
                     <th className="p-3.5">الطلبات والمشتريات</th>
                     <th className="p-3.5">تاريخ التسجيل</th>
-                    {isAdmin && <th className="p-3.5 text-center">الإجراءات</th>}
+                    {isAdmin && <th className="p-3.5 text-center">إجراءات الإدارة</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -407,10 +605,17 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
                       const latestAssignment = salesRepAssignments.find((a) => a.customer_id === c.id);
 
                       return (
-                        <tr key={c.id} className="hover:bg-slate-50/60 transition">
+                        <tr key={c.id} className={`hover:bg-slate-50/60 transition ${c.is_active === false ? 'bg-slate-50/50 opacity-75' : ''}`}>
                           {/* Customer & Company */}
                           <td className="p-3.5">
-                            <div className="font-bold text-slate-900">{c.full_name}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-900">{c.full_name}</span>
+                              {c.is_active === false && (
+                                <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.2 rounded">
+                                  معطل
+                                </span>
+                              )}
+                            </div>
                             {c.company_name && (
                               <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                                 <Building className="w-3 h-3 text-slate-400 shrink-0" />
@@ -469,13 +674,50 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
                           {/* Admin Actions */}
                           {isAdmin && (
                             <td className="p-3.5 text-center">
-                              <button
-                                onClick={() => openTransferModal(c)}
-                                className="px-3 py-1.5 text-xs font-bold text-[#0099DD] hover:bg-sky-50 border border-sky-200 rounded-lg transition inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-                              >
-                                <ArrowRightLeft className="w-3 h-3 text-[#0099DD]" />
-                                <span>تحويل المندوب</span>
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => openTransferModal(c)}
+                                  title="تحويل المندوب"
+                                  className="p-1.5 text-[#0099DD] hover:bg-sky-50 border border-sky-200 rounded-lg transition cursor-pointer shadow-xs"
+                                >
+                                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenEditModal(c)}
+                                  title="تعديل بيانات العميل"
+                                  className="p-1.5 text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-lg transition cursor-pointer shadow-xs"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleToggleStatus(c)}
+                                  title={c.is_active === false ? 'تفعيل الحساب' : 'تعطيل الحساب'}
+                                  className={`p-1.5 rounded-lg border transition cursor-pointer shadow-xs ${
+                                    c.is_active === false
+                                      ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
+                                      : 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200'
+                                  }`}
+                                >
+                                  <Power className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setViewingCustomer(c)}
+                                  title="عرض سجل الطلبات والتفاصيل"
+                                  className="p-1.5 text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-lg transition cursor-pointer shadow-xs"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDeletingCustomer(c);
+                                    setDeleteFeedback(null);
+                                  }}
+                                  title="حذف العميل"
+                                  className="p-1.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition cursor-pointer shadow-xs"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -947,6 +1189,573 @@ export function CustomerManager({ currentRole, staffProfile }: CustomerManagerPr
           </div>
         </div>
       )}
+
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: ADD CUSTOMER                                                     */}
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">إضافة عميل جديد</h3>
+                  <p className="text-[11px] text-slate-300">إنشاء حساب عميل جديد وتعيين المندوب المسؤول</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                disabled={addLoading}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleCreateCustomer} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">اسم العميل *</label>
+                  <input
+                    type="text"
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    placeholder="مثال: أحمد محمود"
+                    required
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">رقم الهاتف *</label>
+                  <input
+                    type="tel"
+                    value={addPhone}
+                    onChange={(e) => setAddPhone(e.target.value)}
+                    placeholder="01XXXXXXXXX"
+                    required
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">اسم الشركة / المؤسسة</label>
+                  <input
+                    type="text"
+                    value={addCompany}
+                    onChange={(e) => setAddCompany(e.target.value)}
+                    placeholder="اختياري"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">المندوب المسؤول</label>
+                <select
+                  value={addRepId}
+                  onChange={(e) => setAddRepId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20 cursor-pointer"
+                >
+                  <option value="">توزيع عادل تلقائي (أقل تشغيلاً)</option>
+                  {salesAgents.map((sa) => (
+                    <option key={sa.id} value={sa.id}>
+                      {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  إذا تركته فارغاً سيُعيَّن تلقائيًا للمندوب الأقل عملاء (توزيع عادل).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">ملاحظات إدارية</label>
+                <textarea
+                  rows={2}
+                  value={addNotes}
+                  onChange={(e) => setAddNotes(e.target.value)}
+                  placeholder="ملاحظات اختيارية تُحفظ في سجل العمليات..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-[#0099DD] focus:ring-1 focus:ring-[#0099DD]/30"
+                />
+              </div>
+
+              {addFeedback && (
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  addFeedback.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  {addFeedback.type === 'success'
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                  <span>{addFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  disabled={addLoading}
+                  className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={addLoading}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  {addLoading ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>جاري الإضافة...</span></>
+                  ) : (
+                    <><Plus className="w-3.5 h-3.5" /><span>إضافة العميل وتعيين المندوب</span></>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: EDIT CUSTOMER                                                    */}
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {editingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">تعديل بيانات العميل</h3>
+                  <p className="text-[11px] text-slate-300">{editingCustomer.full_name} — {editingCustomer.phone}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setEditingCustomer(null); setEditFeedback(null); }}
+                disabled={editLoading}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleUpdateCustomer} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">اسم العميل *</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    required
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">رقم الهاتف *</label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    required
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">اسم الشركة / المؤسسة</label>
+                  <input
+                    type="text"
+                    value={editCompany}
+                    onChange={(e) => setEditCompany(e.target.value)}
+                    placeholder="اختياري"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">المندوب المسؤول</label>
+                <select
+                  value={editRepId}
+                  onChange={(e) => setEditRepId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20 cursor-pointer"
+                >
+                  <option value="">بدون مندوب (توزيع تلقائي عند الطلب)</option>
+                  {salesAgents.map((sa) => {
+                    const isCurrent = sa.id === editingCustomer.assigned_sales_rep_id;
+                    return (
+                      <option key={sa.id} value={sa.id}>
+                        {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل){isCurrent ? ' ← الحالي' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editIsActive}
+                    onChange={(e) => setEditIsActive(e.target.checked)}
+                    className="rounded text-[#0099DD] focus:ring-[#0099DD] cursor-pointer"
+                  />
+                  <span className="text-xs font-semibold text-slate-800">
+                    الحساب نشط ومفعّل
+                    {!editIsActive && (
+                      <span className="mr-2 text-rose-600 font-bold">(معطل حالياً)</span>
+                    )}
+                  </span>
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">ملاحظات التعديل</label>
+                <textarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="سبب التعديل — يُحفظ في سجل العمليات إذا تغيّر المندوب..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-[#0099DD] focus:ring-1 focus:ring-[#0099DD]/30"
+                />
+              </div>
+
+              {editFeedback && (
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  editFeedback.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  {editFeedback.type === 'success'
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                  <span>{editFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setEditingCustomer(null); setEditFeedback(null); }}
+                  disabled={editLoading}
+                  className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="px-5 py-2 bg-[#0099DD] hover:bg-[#007BB3] disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  {editLoading ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>جاري الحفظ...</span></>
+                  ) : (
+                    <><Save className="w-3.5 h-3.5" /><span>حفظ التعديلات</span></>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: DELETE CUSTOMER CONFIRMATION                                     */}
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {deletingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="bg-rose-700 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">حذف / تعطيل العميل</h3>
+                  <p className="text-[11px] text-rose-200">هذه العملية لا يمكن التراجع عنها</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setDeletingCustomer(null); setDeleteFeedback(null); }}
+                disabled={deleteLoading}
+                className="text-rose-200 hover:text-white p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {/* Customer Card */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
+                <div className="font-bold text-slate-900">{deletingCustomer.full_name}</div>
+                <div className="text-xs font-mono text-slate-600">{deletingCustomer.phone}</div>
+                {deletingCustomer.company_name && (
+                  <div className="text-xs text-slate-500 flex items-center gap-1">
+                    <Building className="w-3 h-3 text-slate-400 shrink-0" />
+                    {deletingCustomer.company_name}
+                  </div>
+                )}
+              </div>
+
+              {/* Warning */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-800 leading-relaxed space-y-1">
+                  <p className="font-bold">تنبيه مهم:</p>
+                  <p>• إذا كان للعميل طلبات مسجلة: سيُعطَّل الحساب فقط (لا يُحذف) حفاظًا على البيانات المالية.</p>
+                  <p>• إذا لم تكن له طلبات: سيُحذف الحساب وسجلاته نهائيًا.</p>
+                </div>
+              </div>
+
+              {deleteFeedback && (
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  deleteFeedback.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  {deleteFeedback.type === 'success'
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                  <span>{deleteFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setDeletingCustomer(null); setDeleteFeedback(null); }}
+                  disabled={deleteLoading}
+                  className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteLoading}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  {deleteLoading ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>جاري التنفيذ...</span></>
+                  ) : (
+                    <><Trash2 className="w-3.5 h-3.5" /><span>تأكيد الحذف / التعطيل</span></>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: VIEW CUSTOMER DETAILS                                            */}
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {viewingCustomer && (() => {
+        const custOrders = orders.filter((o) => o.customer_id === viewingCustomer.id);
+        const totalSpent = custOrders.filter((o) => o.status !== 'returned').reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+        const custRep = viewingCustomer.assigned_sales_rep_id
+          ? salesAgents.find((sa) => sa.id === viewingCustomer.assigned_sales_rep_id)
+          : null;
+        const custLogs = salesRepAssignments.filter((l) => l.customer_id === viewingCustomer.id);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="bg-slate-900 text-white p-4 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                    <Eye className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm">{viewingCustomer.full_name}</h3>
+                    <p className="text-[11px] text-slate-300 font-mono">{viewingCustomer.phone}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewingCustomer(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div className="overflow-y-auto p-5 space-y-5 flex-1">
+                {/* Profile Info */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <div className="text-[10px] text-slate-500 font-semibold mb-1">الشركة / المؤسسة</div>
+                    <div className="text-xs font-bold text-slate-800">{viewingCustomer.company_name || '—'}</div>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <div className="text-[10px] text-slate-500 font-semibold mb-1">المندوب المعتمد</div>
+                    <div className="text-xs font-bold text-[#0099DD] flex items-center gap-1">
+                      <UserCheck className="w-3 h-3 shrink-0" />
+                      {custRep ? custRep.full_name : 'غير محدد'}
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <div className="text-[10px] text-slate-500 font-semibold mb-1">حالة الحساب</div>
+                    <div className={`text-xs font-bold ${viewingCustomer.is_active === false ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {viewingCustomer.is_active === false ? '⛔ معطل' : '✅ نشط'}
+                    </div>
+                  </div>
+                  <div className="bg-sky-50 border border-sky-200 rounded-xl p-3">
+                    <div className="text-[10px] text-slate-500 font-semibold mb-1">إجمالي الطلبات</div>
+                    <div className="text-xl font-black text-[#0099DD]">{custOrders.length}</div>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                    <div className="text-[10px] text-slate-500 font-semibold mb-1">إجمالي المشتريات</div>
+                    <div className="text-sm font-black text-emerald-700 font-mono">
+                      {totalSpent.toLocaleString('ar-EG', { minimumFractionDigits: 0 })} ج.م
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <div className="text-[10px] text-slate-500 font-semibold mb-1">تاريخ التسجيل</div>
+                    <div className="text-xs font-bold text-slate-700 font-mono">
+                      {viewingCustomer.created_at ? new Date(viewingCustomer.created_at).toLocaleDateString('ar-EG') : '—'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Orders Table */}
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-800 mb-2 flex items-center gap-1.5">
+                    <ShoppingBag className="w-4 h-4 text-[#0099DD]" />
+                    سجل الطلبات ({custOrders.length})
+                  </h4>
+                  {custOrders.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+                      لا توجد طلبات مسجلة لهذا العميل بعد.
+                    </div>
+                  ) : (
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <table className="w-full text-right text-xs">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                          <tr>
+                            <th className="p-2.5">رقم الطلب</th>
+                            <th className="p-2.5">الحالة</th>
+                            <th className="p-2.5">المبلغ</th>
+                            <th className="p-2.5">التاريخ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {custOrders.slice(0, 10).map((o) => (
+                            <tr key={o.id} className="hover:bg-slate-50/60">
+                              <td className="p-2.5 font-mono text-[11px] text-slate-600">
+                                #{o.id.slice(-6).toUpperCase()}
+                              </td>
+                              <td className="p-2.5">
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  (o.status as string) === 'delivered' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : (o.status as string) === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : (o.status as string) === 'cancelled' ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : (o.status as string) === 'returned' ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : 'bg-slate-50 text-slate-600 border border-slate-200'
+                                }`}>
+                                  {(o.status as string) === 'delivered' ? 'تم التسليم'
+                                    : (o.status as string) === 'pending' ? 'قيد المراجعة'
+                                    : (o.status as string) === 'confirmed' ? 'مؤكد'
+                                    : (o.status as string) === 'preparing' ? 'جاري التجهيز'
+                                    : (o.status as string) === 'cancelled' ? 'ملغي'
+                                    : (o.status as string) === 'returned' ? 'مرتجع'
+                                    : o.status}
+                                </span>
+
+                              </td>
+                              <td className="p-2.5 font-mono font-bold text-[#0099DD]">
+                                {Number(o.total_amount).toLocaleString('ar-EG', { minimumFractionDigits: 0 })} ج.م
+                              </td>
+                              <td className="p-2.5 text-slate-500 font-mono text-[11px]">
+                                {new Date(o.created_at).toLocaleDateString('ar-EG')}
+                              </td>
+                            </tr>
+                          ))}
+                          {custOrders.length > 10 && (
+                            <tr>
+                              <td colSpan={4} className="text-center py-2 text-[11px] text-slate-400">
+                                + {custOrders.length - 10} طلبات أخرى
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Assignment History */}
+                {custLogs.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-extrabold text-slate-800 mb-2 flex items-center gap-1.5">
+                      <History className="w-4 h-4 text-slate-500" />
+                      سجل تعيين المناديب ({custLogs.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {custLogs.map((log, i) => (
+                        <div key={log.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              {renderAssignmentBadge(log.assignment_type)}
+                              {i === 0 && (
+                                <span className="text-[10px] text-[#0099DD] font-bold">← الحالي</span>
+                              )}
+                            </div>
+                            <div className="text-xs font-bold text-slate-800">{log.sales_rep_name || 'غير محدد'}</div>
+                            {log.previous_rep_name && (
+                              <div className="text-[11px] text-slate-400">
+                                من: <span className="line-through">{log.previous_rep_name}</span>
+                              </div>
+                            )}
+                            {log.notes && (
+                              <div className="text-[11px] text-slate-500 italic">{log.notes}</div>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono whitespace-nowrap shrink-0">
+                            {new Date(log.created_at).toLocaleDateString('ar-EG')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+                <a
+                  href={`https://wa.me/${viewingCustomer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`مرحباً ${viewingCustomer.full_name}، أتواصل معك من متجر MH EL MAHDY.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  واتساب العميل
+                </a>
+                <button
+                  onClick={() => setViewingCustomer(null)}
+                  className="px-5 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

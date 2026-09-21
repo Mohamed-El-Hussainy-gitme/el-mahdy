@@ -20,8 +20,10 @@ import {
   AlertCircle,
   ArrowRight,
   Calendar,
+  UserCheck,
+  Loader2,
 } from 'lucide-react';
-import { useStore } from '@/context/StoreContext';
+import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
 import { Order, OrderStatus } from '@/types';
 
 // ========================
@@ -167,7 +169,30 @@ export default function AccountPage() {
     logout,
     openAccountModalWithTab,
     fetchCustomerOrders,
+    staffMembers,
+    customRoles,
+    customerChangeSalesRep,
   } = useStore();
+
+  // Filter available sales reps for customer selection
+  const availableReps = useMemo(() => {
+    const list = staffMembers.filter((s) => {
+      if (s.is_active === false) return false;
+      if (s.role === 'sales_agent') return true;
+      if (s.custom_role?.can_receive_customers) return true;
+      const cRole = customRoles.find((r) => r.id === s.custom_role_id);
+      if (cRole?.can_receive_customers) return true;
+      return s.role === 'admin';
+    });
+    if (list.length > 0) return list;
+    return [DEFAULT_STICKY_SALES_REP];
+  }, [staffMembers, customRoles]);
+
+  const [isChangingRep, setIsChangingRep] = useState(false);
+  const [changeRepMode, setChangeRepMode] = useState<'auto' | 'custom'>('custom');
+  const [changeRepSelectedId, setChangeRepSelectedId] = useState<string>('');
+  const [changeRepLoading, setChangeRepLoading] = useState(false);
+  const [changeRepMessage, setChangeRepMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Fetch orders on mount if user is logged in
   useEffect(() => {
@@ -287,33 +312,169 @@ export default function AccountPage() {
         </div>
 
         {/* Sales rep card */}
-        <div className={`rounded-2xl border p-4 shadow-sm flex items-center gap-4 ${
-          hasRep ? 'bg-sky-50 border-sky-200' : 'bg-white border-slate-200'
+        <div className={`rounded-2xl border p-4 shadow-sm space-y-3 ${
+          hasRep ? 'bg-sky-50/70 border-sky-200' : 'bg-white border-slate-200'
         }`}>
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-            hasRep ? 'bg-[#0099DD] text-white' : 'bg-slate-100 text-slate-500'
-          }`}>
-            <Phone className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] text-slate-500 font-bold">مندوب المبيعات المعتمد</div>
-            <div className="font-extrabold text-slate-900 text-sm mt-0.5">
-              {hasRep ? repName : 'لم يتم تعيين مندوب بعد'}
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+              hasRep ? 'bg-[#0099DD] text-white' : 'bg-slate-100 text-slate-500'
+            }`}>
+              <Phone className="w-5 h-5" />
             </div>
-            {hasRep && repPhone && (
-              <div className="text-xs text-slate-500 font-mono mt-0.5" dir="ltr">{repPhone}</div>
-            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-bold">مندوب المبيعات المعتمد</span>
+                {currentUser?.assignment_type === 'customer_choice' ? (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    باختيارك
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full">
+                    توزيع عادل
+                  </span>
+                )}
+              </div>
+              <div className="font-extrabold text-slate-900 text-sm mt-0.5">
+                {hasRep ? repName : 'لم يتم تعيين مندوب بعد'}
+              </div>
+              {hasRep && repPhone && (
+                <div className="text-xs text-slate-500 font-mono mt-0.5" dir="ltr">{repPhone}</div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChangingRep(!isChangingRep);
+                  setChangeRepMessage(null);
+                  if (currentUser?.assigned_sales_rep_id) {
+                    setChangeRepSelectedId(currentUser.assigned_sales_rep_id);
+                    setChangeRepMode('custom');
+                  }
+                }}
+                className="px-3 py-2 text-xs font-bold text-[#0099DD] bg-white hover:bg-sky-100/50 border border-sky-300 rounded-xl transition cursor-pointer shadow-xs"
+              >
+                {isChangingRep ? 'إغلاق الاختيار' : 'تغيير المندوب'}
+              </button>
+              {waPhone && (
+                <a
+                  href={`https://wa.me/${waPhone}?text=${encodeURIComponent(waMessage)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  واتساب
+                </a>
+              )}
+            </div>
           </div>
-          {waPhone && (
-            <a
-              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(waMessage)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm shrink-0"
-            >
-              <MessageCircle className="w-4 h-4" />
-              واتساب
-            </a>
+
+          {/* Collapsible Rep Selector */}
+          {isChangingRep && (
+            <div className="bg-white border border-sky-200 rounded-xl p-4 space-y-3 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-[#0099DD]" />
+                <span>اختر كيفية تعيين مندوب المبيعات المعتمد لك:</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChangeRepMode('auto')}
+                  className={`p-3 rounded-xl border text-right transition flex flex-col justify-between cursor-pointer ${
+                    changeRepMode === 'auto'
+                      ? 'border-[#0099DD] bg-sky-50 text-[#0099DD] font-bold ring-1 ring-[#0099DD]'
+                      : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                  }`}
+                >
+                  <span className="text-xs font-bold">توزيع عادل تلقائي</span>
+                  <span className="text-[10px] text-slate-500 mt-1">إسناد للمندوب الأقل تشغيلاً بالتكافؤ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChangeRepMode('custom');
+                    if (!changeRepSelectedId && availableReps.length > 0) {
+                      setChangeRepSelectedId(availableReps[0].id);
+                    }
+                  }}
+                  className={`p-3 rounded-xl border text-right transition flex flex-col justify-between cursor-pointer ${
+                    changeRepMode === 'custom'
+                      ? 'border-[#0099DD] bg-sky-50 text-[#0099DD] font-bold ring-1 ring-[#0099DD]'
+                      : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+                  }`}
+                >
+                  <span className="text-xs font-bold">اختيار مندوب محدد</span>
+                  <span className="text-[10px] text-slate-500 mt-1">تحديد المندوب بالاسم من قائمة المناديب</span>
+                </button>
+              </div>
+
+              {changeRepMode === 'custom' && (
+                <div className="space-y-1 pt-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    قائمة المناديب المعتمدين:
+                  </label>
+                  <select
+                    value={changeRepSelectedId}
+                    onChange={(e) => setChangeRepSelectedId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-800 font-medium focus:outline-none focus:border-[#0099DD] cursor-pointer"
+                  >
+                    {availableReps.map((rep) => (
+                      <option key={rep.id} value={rep.id}>
+                        {rep.full_name} {rep.phone ? `(${rep.phone})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {changeRepMessage && (
+                <div className={`p-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  changeRepMessage.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}>
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{changeRepMessage.text}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={changeRepLoading}
+                  onClick={async () => {
+                    setChangeRepLoading(true);
+                    setChangeRepMessage(null);
+                    const targetId = changeRepMode === 'custom' ? changeRepSelectedId : undefined;
+                    const res = await customerChangeSalesRep(targetId);
+                    setChangeRepLoading(false);
+                    if (res.success) {
+                      setChangeRepMessage({ type: 'success', text: res.message || 'تم تحديث مندوبك بنجاح' });
+                      setTimeout(() => {
+                        setIsChangingRep(false);
+                        setChangeRepMessage(null);
+                      }, 1500);
+                    } else {
+                      setChangeRepMessage({ type: 'error', text: res.message || 'حدث خطأ أثناء حفظ الاختيار' });
+                    }
+                  }}
+                  className="flex-1 bg-[#0099DD] hover:bg-[#007BB3] text-white py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                >
+                  {changeRepLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                  <span>حفظ وتأكيد الاختيار</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsChangingRep(false)}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
           )}
         </div>
 

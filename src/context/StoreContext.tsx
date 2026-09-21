@@ -201,8 +201,13 @@ interface StoreContextType {
   staffMembers: UserProfile[];
   salesRepAssignments: SalesRepAssignment[];
   assignCustomerSalesRep: (customerId: string, salesRepId: string, notes?: string, reassignPendingOrders?: boolean) => Promise<{ success: boolean; message?: string }>;
+  customerChangeSalesRep: (preferredSalesRepId?: string, notes?: string) => Promise<{ success: boolean; message?: string }>;
   getLeastLoadedSalesRep: () => UserProfile | null;
   getSalesRepPerformanceReports: () => SalesRepPerformanceReport[];
+  adminCreateCustomer: (data: { full_name: string; phone: string; company_name?: string; sales_rep_id?: string; notes?: string }) => Promise<{ success: boolean; message?: string; customer?: UserProfile }>;
+  adminUpdateCustomer: (id: string, updates: { full_name?: string; phone?: string; company_name?: string; sales_rep_id?: string; is_active?: boolean; notes?: string }) => Promise<{ success: boolean; message?: string }>;
+  adminToggleCustomerActive: (id: string, isActive: boolean) => Promise<{ success: boolean; message?: string }>;
+  adminDeleteCustomer: (id: string) => Promise<{ success: boolean; message?: string }>;
 
   // Custom Roles & Permissions Management (Admin)
   customRoles: CustomRole[];
@@ -344,6 +349,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       const savedAssignments = localStorage.getItem('mh_mahdy_rep_assignments');
       if (savedAssignments) setSalesRepAssignments(JSON.parse(savedAssignments));
+
+      const savedCustomers = localStorage.getItem('mh_mahdy_customers');
+      if (savedCustomers) setCustomers(JSON.parse(savedCustomers));
+
+      const savedStaffList = localStorage.getItem('mh_mahdy_staff_list');
+      if (savedStaffList) {
+        setStaffMembers(JSON.parse(savedStaffList));
+      } else {
+        setStaffMembers([DEFAULT_STICKY_SALES_REP]);
+      }
     } catch (e) {
       console.warn('Storage read warning:', e);
     }
@@ -632,23 +647,63 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Customers List
+      let custList: UserProfile[] = [];
       const { data: dbCustomers } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('role', 'customer')
         .order('created_at', { ascending: false });
-      if (dbCustomers) {
-        setCustomers(dbCustomers);
+      if (dbCustomers && dbCustomers.length > 0) {
+        custList = dbCustomers as UserProfile[];
+      } else {
+        // Fallback to security definer RPC sp_admin_get_customers
+        try {
+          const { data: rpcCustomers } = await supabase.rpc('sp_admin_get_customers');
+          if (rpcCustomers && rpcCustomers.length > 0) {
+            custList = rpcCustomers as UserProfile[];
+          }
+        } catch (rpcErr) {
+          console.warn('sp_admin_get_customers RPC notice:', rpcErr);
+        }
+      }
+      if (custList.length > 0) {
+        setCustomers(custList);
+        try { localStorage.setItem('mh_mahdy_customers', JSON.stringify(custList)); } catch {}
       }
 
       // Staff Members List (Admin, Sales, Warehouse, or any custom role staff)
+      let staffList: UserProfile[] = [];
       const { data: dbStaff } = await supabase
         .from('user_profiles')
         .select('*, custom_role:custom_roles(*)')
         .neq('role', 'customer')
         .order('created_at', { ascending: true });
-      if (dbStaff) {
-        setStaffMembers(dbStaff as UserProfile[]);
+      if (dbStaff && dbStaff.length > 0) {
+        staffList = dbStaff as UserProfile[];
+      } else {
+        // Fallback for public/customer context: call sp_get_active_sales_reps RPC
+        try {
+          const { data: rpcStaff } = await supabase.rpc('sp_get_active_sales_reps');
+          if (rpcStaff && rpcStaff.length > 0) {
+            staffList = rpcStaff.map((s: any) => ({
+              id: s.id,
+              full_name: s.full_name,
+              phone: s.phone,
+              role: s.role,
+              custom_role_name: s.custom_role_name,
+              is_active: true,
+            }));
+          }
+        } catch (rpcErr) {
+          console.warn('sp_get_active_sales_reps notice:', rpcErr);
+        }
+      }
+
+      if (staffList.length > 0) {
+        setStaffMembers(staffList);
+        try { localStorage.setItem('mh_mahdy_staff_list', JSON.stringify(staffList)); } catch {}
+      } else {
+        setStaffMembers([DEFAULT_STICKY_SALES_REP]);
       }
 
       // Custom Roles List
@@ -1484,6 +1539,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         metadata: { role: profile.role, email: profile.email },
         severity: 'info',
       });
+      await refreshData();
       return { success: true, role: profile.role as UserRole };
 
     } catch (err) {
@@ -1785,6 +1841,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setCurrentUser(userProfile);
           try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
 
+          // Update customers state and persistence
+          setCustomers((prev) => [userProfile, ...prev.filter((c) => c.id !== userProfile.id)]);
+          try {
+            const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+            localStorage.setItem('mh_mahdy_customers', JSON.stringify([userProfile, ...stored.filter((c: any) => c.id !== userProfile.id)]));
+          } catch {}
+
           // Record assignment in local assignments log
           const newAssignmentLog: SalesRepAssignment = {
             id: generateUUID(),
@@ -1870,6 +1933,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         };
         setCurrentUser(userProfile);
         try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
+
+        setCustomers((prev) => [userProfile, ...prev.filter((c) => c.id !== userProfile.id)]);
+        try {
+          const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+          localStorage.setItem('mh_mahdy_customers', JSON.stringify([userProfile, ...stored.filter((c: any) => c.id !== userProfile.id)]));
+        } catch {}
+
         return { success: true, user: userProfile };
       } catch (err) {
         console.warn('registerCustomer error:', err);
@@ -1892,6 +1962,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(userProfile);
     try { localStorage.setItem('mh_mahdy_user', JSON.stringify(userProfile)); } catch {}
 
+    setCustomers((prev) => [userProfile, ...prev.filter((c) => c.id !== userProfile.id)]);
+    try {
+      const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+      localStorage.setItem('mh_mahdy_customers', JSON.stringify([userProfile, ...stored.filter((c: any) => c.id !== userProfile.id)]));
+    } catch {}
+
     const newAssignmentLog: SalesRepAssignment = {
       id: generateUUID(),
       customer_id: userProfile.id,
@@ -1907,6 +1983,83 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
 
     return { success: true, user: userProfile };
+  };
+
+  const customerChangeSalesRep = async (
+    preferredSalesRepId?: string,
+    notes?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser) return { success: false, message: 'يرجى تسجيل الدخول أولاً' };
+
+    const chosenRep = preferredSalesRepId
+      ? staffMembers.find((s) => s.id === preferredSalesRepId && s.is_active !== false)
+      : null;
+    const leastRep = getLeastLoadedSalesRep();
+    const targetRep = chosenRep || leastRep || DEFAULT_STICKY_SALES_REP;
+    const assignmentType: AssignmentType = chosenRep ? 'customer_choice' : 'auto_fair_distribution';
+    const finalNotes =
+      notes ||
+      (chosenRep
+        ? 'قام العميل باختيار هذا المندوب بنفسه من حسابه'
+        : 'طلب العميل إعادة التوزيع العادل التلقائي');
+
+    const updatedUser: UserProfile = {
+      ...currentUser,
+      assigned_sales_rep_id: targetRep?.id,
+      assigned_sales_rep_name: targetRep?.full_name,
+      assigned_sales_rep_phone: targetRep?.phone,
+      assignment_type: assignmentType,
+    };
+    setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem('mh_mahdy_user', JSON.stringify(updatedUser));
+    } catch {}
+
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === currentUser.id ? { ...c, ...updatedUser } : c))
+    );
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.customer_id === currentUser.id && o.status === 'pending'
+          ? {
+              ...o,
+              sales_agent_id: targetRep?.id,
+              sales_agent_name: targetRep?.full_name,
+              sales_agent_phone: targetRep?.phone,
+            }
+          : o
+      )
+    );
+
+    const newAssignmentLog: SalesRepAssignment = {
+      id: generateUUID(),
+      customer_id: currentUser.id,
+      customer_name: currentUser.full_name,
+      customer_phone: currentUser.phone,
+      customer_company: currentUser.company_name,
+      sales_rep_id: targetRep?.id,
+      sales_rep_name: targetRep?.full_name,
+      previous_rep_id: currentUser.assigned_sales_rep_id,
+      previous_rep_name: currentUser.assigned_sales_rep_name,
+      assignment_type: assignmentType,
+      notes: finalNotes,
+      created_at: new Date().toISOString(),
+    };
+    setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.rpc('sp_customer_choose_sales_rep', {
+          p_customer_id: currentUser.id,
+          p_sales_rep_id: chosenRep ? chosenRep.id : null,
+          p_notes: finalNotes,
+        });
+      } catch (e) {
+        console.warn('sp_customer_choose_sales_rep error:', e);
+      }
+      await refreshData();
+    }
+    return { success: true, message: 'تم تحديث مندوبك المعتمد بنجاح' };
   };
 
 
@@ -2319,6 +2472,254 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: 'تم تحويل العميل بنجاح وتوثيق الحركة في سجل العمليات' };
   };
 
+  // Admin: Create New Customer Manually
+  const adminCreateCustomer = async (data: {
+    full_name: string;
+    phone: string;
+    company_name?: string;
+    sales_rep_id?: string;
+    notes?: string;
+  }): Promise<{ success: boolean; message?: string; customer?: UserProfile }> => {
+    const cleanName = data.full_name.trim();
+    const cleanPhone = normalizeEgyptianPhone(data.phone);
+    if (!cleanName) return { success: false, message: 'يرجى إدخال اسم العميل' };
+    if (!cleanPhone || !isValidEgyptianMobile(cleanPhone)) {
+      return { success: false, message: 'يرجى إدخال رقم هاتف محمول مصري صحيح' };
+    }
+
+    if (customers.some((c) => c.phone === cleanPhone)) {
+      return { success: false, message: 'رقم الهاتف مسجل مسبقاً لعميل آخر' };
+    }
+
+    const chosenRep = data.sales_rep_id
+      ? staffMembers.find((s) => s.id === data.sales_rep_id && s.is_active !== false)
+      : null;
+    const leastRep = getLeastLoadedSalesRep();
+    const targetRep = chosenRep || leastRep || DEFAULT_STICKY_SALES_REP;
+    const assignmentType: AssignmentType = chosenRep ? 'admin_transfer' : 'auto_fair_distribution';
+
+    const newCustId = generateUUID();
+    const newCustomer: UserProfile = {
+      id: newCustId,
+      full_name: cleanName,
+      phone: cleanPhone,
+      company_name: data.company_name?.trim() || undefined,
+      role: 'customer',
+      is_active: true,
+      assigned_sales_rep_id: targetRep?.id,
+      assigned_sales_rep_name: targetRep?.full_name,
+      assigned_sales_rep_phone: targetRep?.phone,
+      assignment_type: assignmentType,
+      created_at: new Date().toISOString(),
+    };
+
+    setCustomers((prev) => [newCustomer, ...prev]);
+    try {
+      const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+      localStorage.setItem('mh_mahdy_customers', JSON.stringify([newCustomer, ...stored]));
+    } catch {}
+
+    const newAssignmentLog: SalesRepAssignment = {
+      id: generateUUID(),
+      customer_id: newCustId,
+      customer_name: cleanName,
+      customer_phone: cleanPhone,
+      customer_company: data.company_name,
+      sales_rep_id: targetRep?.id,
+      sales_rep_name: targetRep?.full_name,
+      assignment_type: assignmentType,
+      notes: data.notes || 'تمت إضافة العميل من لوحة التحكم',
+      assigned_by: staffSession?.id,
+      assigned_by_name: staffSession?.full_name,
+      created_at: new Date().toISOString(),
+    };
+    setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('sp_admin_save_customer', {
+          p_id: null,
+          p_full_name: cleanName,
+          p_phone: cleanPhone,
+          p_company_name: data.company_name?.trim() || null,
+          p_is_active: true,
+          p_assigned_sales_rep_id: targetRep?.id || null,
+          p_notes: data.notes || null,
+          p_admin_id: staffSession?.id || null,
+        });
+
+        if (rpcErr || (rpcRes && !rpcRes.success)) {
+          console.warn('sp_admin_save_customer notice:', rpcErr || rpcRes?.message);
+        }
+      } catch (err) {
+        console.warn('adminCreateCustomer RPC error:', err);
+      }
+      await refreshData();
+    }
+
+    return { success: true, message: 'تم إنشاء حساب العميل وربطه بالمندوب بنجاح', customer: newCustomer };
+  };
+
+  // Admin: Update Customer Details
+  const adminUpdateCustomer = async (
+    id: string,
+    updates: {
+      full_name?: string;
+      phone?: string;
+      company_name?: string;
+      sales_rep_id?: string;
+      is_active?: boolean;
+      notes?: string;
+    }
+  ): Promise<{ success: boolean; message?: string }> => {
+    const existingCust = customers.find((c) => c.id === id);
+    if (!existingCust) return { success: false, message: 'العميل غير موجود' };
+
+    const cleanName = updates.full_name !== undefined ? updates.full_name.trim() : existingCust.full_name;
+    const cleanPhone = updates.phone !== undefined ? normalizeEgyptianPhone(updates.phone) : existingCust.phone;
+    const cleanCompany = updates.company_name !== undefined ? updates.company_name.trim() : existingCust.company_name;
+    const isActive = updates.is_active !== undefined ? updates.is_active : (existingCust.is_active !== false);
+
+    let targetRep = updates.sales_rep_id
+      ? staffMembers.find((s) => s.id === updates.sales_rep_id && s.is_active !== false)
+      : null;
+    const repChanged = updates.sales_rep_id && updates.sales_rep_id !== existingCust.assigned_sales_rep_id;
+
+    const updatedCust: UserProfile = {
+      ...existingCust,
+      full_name: cleanName,
+      phone: cleanPhone,
+      company_name: cleanCompany,
+      is_active: isActive,
+      assigned_sales_rep_id: targetRep ? targetRep.id : existingCust.assigned_sales_rep_id,
+      assigned_sales_rep_name: targetRep ? targetRep.full_name : existingCust.assigned_sales_rep_name,
+      assigned_sales_rep_phone: targetRep ? targetRep.phone : existingCust.assigned_sales_rep_phone,
+      assignment_type: repChanged ? 'admin_transfer' : existingCust.assignment_type,
+    };
+
+    setCustomers((prev) => prev.map((c) => (c.id === id ? updatedCust : c)));
+    try {
+      localStorage.setItem('mh_mahdy_customers', JSON.stringify(customers.map((c) => (c.id === id ? updatedCust : c))));
+    } catch {}
+
+    if (repChanged && targetRep) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.customer_id === id && o.status === 'pending'
+            ? {
+                ...o,
+                sales_agent_id: targetRep!.id,
+                sales_agent_name: targetRep!.full_name,
+                sales_agent_phone: targetRep!.phone,
+              }
+            : o
+        )
+      );
+
+      const logEntry: SalesRepAssignment = {
+        id: generateUUID(),
+        customer_id: id,
+        customer_name: cleanName,
+        customer_phone: cleanPhone,
+        customer_company: cleanCompany,
+        sales_rep_id: targetRep.id,
+        sales_rep_name: targetRep.full_name,
+        previous_rep_id: existingCust.assigned_sales_rep_id,
+        previous_rep_name: existingCust.assigned_sales_rep_name,
+        assignment_type: 'admin_transfer',
+        notes: updates.notes || 'تعديل بيانات العميل والمندوب من الإدارة',
+        assigned_by: staffSession?.id,
+        assigned_by_name: staffSession?.full_name,
+        created_at: new Date().toISOString(),
+      };
+      setSalesRepAssignments((prev) => [logEntry, ...prev]);
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.rpc('sp_admin_save_customer', {
+          p_id: id,
+          p_full_name: cleanName,
+          p_phone: cleanPhone,
+          p_company_name: cleanCompany || null,
+          p_is_active: isActive,
+          p_assigned_sales_rep_id: targetRep ? targetRep.id : existingCust.assigned_sales_rep_id || null,
+          p_notes: updates.notes || null,
+          p_admin_id: staffSession?.id || null,
+        });
+      } catch (err) {
+        console.warn('adminUpdateCustomer RPC error:', err);
+      }
+      await refreshData();
+    }
+
+    return { success: true, message: 'تم تحديث بيانات العميل بنجاح' };
+  };
+
+  // Admin: Toggle Customer Active Status
+  const adminToggleCustomerActive = async (id: string, isActive: boolean): Promise<{ success: boolean; message?: string }> => {
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, is_active: isActive } : c))
+    );
+    try {
+      const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+      localStorage.setItem(
+        'mh_mahdy_customers',
+        JSON.stringify(stored.map((c: any) => (c.id === id ? { ...c, is_active: isActive } : c)))
+      );
+    } catch {}
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.rpc('sp_admin_toggle_customer_status', {
+          p_customer_id: id,
+          p_is_active: isActive,
+        });
+      } catch (err) {
+        console.warn('adminToggleCustomerActive error:', err);
+        await supabase.from('user_profiles').update({ is_active: isActive }).eq('id', id);
+      }
+      await refreshData();
+    }
+
+    return {
+      success: true,
+      message: isActive ? 'تم تفعيل حساب العميل بنجاح' : 'تم تعطيل حساب العميل بنجاح',
+    };
+  };
+
+  // Admin: Delete Customer
+  const adminDeleteCustomer = async (id: string): Promise<{ success: boolean; message?: string }> => {
+    const hasOrders = orders.some((o) => o.customer_id === id && o.status !== 'returned');
+    if (hasOrders) {
+      return adminToggleCustomerActive(id, false);
+    }
+
+    setCustomers((prev) => prev.filter((c) => c.id !== id));
+    try {
+      const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+      localStorage.setItem('mh_mahdy_customers', JSON.stringify(stored.filter((c: any) => c.id !== id)));
+    } catch {}
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: rpcRes } = await supabase.rpc('sp_admin_delete_customer', {
+          p_customer_id: id,
+        });
+        if (rpcRes?.message) {
+          await refreshData();
+          return { success: true, message: rpcRes.message };
+        }
+      } catch (err) {
+        console.warn('adminDeleteCustomer error:', err);
+        await supabase.from('user_profiles').delete().eq('id', id);
+      }
+      await refreshData();
+    }
+
+    return { success: true, message: 'تم حذف العميل وسجلاته بنجاح' };
+  };
+
   // Automatic Least-Loaded Sales Rep (Equal Opportunities Distribution)
   const getLeastLoadedSalesRep = useCallback((): UserProfile | null => {
     const eligibleReps = staffMembers.filter((s) => {
@@ -2648,8 +3049,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         staffMembers,
         salesRepAssignments,
         assignCustomerSalesRep,
+        customerChangeSalesRep,
         getLeastLoadedSalesRep,
         getSalesRepPerformanceReports,
+        adminCreateCustomer,
+        adminUpdateCustomer,
+        adminToggleCustomerActive,
+        adminDeleteCustomer,
 
         customRoles,
         addCustomRole,

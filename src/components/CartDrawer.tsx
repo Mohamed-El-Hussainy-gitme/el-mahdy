@@ -17,8 +17,9 @@ import {
   ArrowLeft,
   Building,
   Loader2,
+  UserCheck,
 } from 'lucide-react';
-import { useStore } from '@/context/StoreContext';
+import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
 
 export default function CartDrawer() {
   const {
@@ -34,12 +35,33 @@ export default function CartDrawer() {
     openAccountModalWithTab,
     placePendingOrder,
     storeSettings,
+    staffMembers,
+    customRoles,
+    customerChangeSalesRep,
   } = useStore();
 
   const [shippingAddress, setShippingAddress] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [submittedOrderNumber, setSubmittedOrderNumber] = useState<string | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
+  // Sales rep selection in cart
+  const [isChangingRep, setIsChangingRep] = useState(false);
+  const [selectedRepId, setSelectedRepId] = useState<string>('');
+  const [repChangeLoading, setRepChangeLoading] = useState(false);
+
+  const availableReps = React.useMemo(() => {
+    const list = staffMembers.filter((s) => {
+      if (s.is_active === false) return false;
+      if (s.role === 'sales_agent') return true;
+      if (s.custom_role?.can_receive_customers) return true;
+      const cRole = customRoles.find((r) => r.id === s.custom_role_id);
+      if (cRole?.can_receive_customers) return true;
+      return s.role === 'admin';
+    });
+    if (list.length > 0) return list;
+    return [DEFAULT_STICKY_SALES_REP];
+  }, [staffMembers, customRoles]);
 
   if (!isCartOpen) return null;
 
@@ -262,14 +284,80 @@ export default function CartDrawer() {
                 </div>
 
                 {/* Sticky Sales Rep Card */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
-                  <div className="text-[11px] text-slate-500">مندوب المبيعات المسؤول عن هذا الطلب:</div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] text-slate-500 font-medium">مندوب المبيعات المسؤول:</div>
+                    {currentUser && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsChangingRep(!isChangingRep);
+                          if (currentUser?.assigned_sales_rep_id) {
+                            setSelectedRepId(currentUser.assigned_sales_rep_id);
+                          }
+                        }}
+                        className="text-[10px] font-bold text-[#0099DD] hover:underline cursor-pointer"
+                      >
+                        {isChangingRep ? 'إلغاء' : 'تغيير المندوب'}
+                      </button>
+                    )}
+                  </div>
+
                   <div className="font-bold text-slate-900 flex items-center justify-between">
-                    <span>{currentUser?.assigned_sales_rep_name || 'سيتم ربطه بالمندوب المعتمد عند التأكيد'}</span>
-                    <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
-                      {currentUser?.assigned_sales_rep_name ? 'تعيين دائم (Sticky)' : 'طلب جديد'}
+                    <div className="flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-[#0099DD]" />
+                      <span>{currentUser?.assigned_sales_rep_name || 'سيتم ربطه بالمندوب المعتمد عند التأكيد'}</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                      {currentUser?.assignment_type === 'customer_choice'
+                        ? 'باختيارك'
+                        : currentUser?.assigned_sales_rep_name
+                        ? 'توزيع عادل'
+                        : 'طلب جديد'}
                     </span>
                   </div>
+
+                  {/* Inline Rep Selector inside Cart Drawer */}
+                  {isChangingRep && (
+                    <div className="pt-2 border-t border-slate-200 space-y-2 animate-in fade-in duration-150">
+                      <div className="text-[10px] font-bold text-slate-700">اختر مندوباً لهذا الطلب ولحسابك:</div>
+                      <select
+                        value={selectedRepId}
+                        onChange={(e) => setSelectedRepId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 font-medium focus:outline-none focus:border-[#0099DD] cursor-pointer"
+                      >
+                        <option value="">-- توزيع عادل تلقائي (الأقل تشغيلاً) --</option>
+                        {availableReps.map((rep) => (
+                          <option key={rep.id} value={rep.id}>
+                            {rep.full_name} {rep.phone ? `(${rep.phone})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={repChangeLoading}
+                          onClick={async () => {
+                            setRepChangeLoading(true);
+                            await customerChangeSalesRep(selectedRepId || undefined);
+                            setRepChangeLoading(false);
+                            setIsChangingRep(false);
+                          }}
+                          className="flex-1 bg-[#0099DD] hover:bg-[#007BB3] text-white py-1 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1"
+                        >
+                          {repChangeLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
+                          تأكيد المندوب
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsChangingRep(false)}
+                          className="px-2.5 py-1 border border-slate-200 text-slate-600 rounded-lg text-[11px]"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Checkout Form */}

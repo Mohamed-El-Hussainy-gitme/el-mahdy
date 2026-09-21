@@ -19,7 +19,7 @@ import {
   RefreshCw,
   Heart,
 } from 'lucide-react';
-import { useStore } from '@/context/StoreContext';
+import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
 
 export default function UserAccountModal() {
   const {
@@ -40,6 +40,7 @@ export default function UserAccountModal() {
     setIsWishlistOpen,
     staffMembers,
     customRoles,
+    customerChangeSalesRep,
   } = useStore();
 
   // Login form state
@@ -58,7 +59,7 @@ export default function UserAccountModal() {
 
   // Filter available sales reps for direct customer choice
   const availableReps = React.useMemo(() => {
-    return staffMembers.filter((s) => {
+    const list = staffMembers.filter((s) => {
       if (s.is_active === false) return false;
       if (s.role === 'sales_agent') return true;
       if (s.custom_role?.can_receive_customers) return true;
@@ -66,7 +67,17 @@ export default function UserAccountModal() {
       if (cRole?.can_receive_customers) return true;
       return s.role === 'admin';
     });
+    if (list.length > 0) return list;
+    return [DEFAULT_STICKY_SALES_REP];
   }, [staffMembers, customRoles]);
+
+  // State for logged-in user changing sales rep
+  const [isChangingRep, setIsChangingRep] = useState(false);
+  const [changeRepMode, setChangeRepMode] = useState<'auto' | 'custom'>('custom');
+  const [changeRepSelectedId, setChangeRepSelectedId] = useState<string>('');
+  const [changeRepLoading, setChangeRepLoading] = useState(false);
+  const [changeRepMessage, setChangeRepMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
@@ -221,11 +232,135 @@ export default function UserAccountModal() {
                       </p>
                     )}
                   </div>
-                  <div className="mt-2 pt-2 border-t border-sky-100 flex items-center justify-between text-xs">
-                    <span className="text-slate-600">المندوب المعتمد الدائم:</span>
-                    <span className="font-bold text-[#0099DD]">
-                      {currentUser.assigned_sales_rep_name || 'سيتم تعيينه مع أول طلب'}
-                    </span>
+                  <div className="mt-2 pt-2 border-t border-sky-100 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600 font-medium">المندوب المعتمد لخدمتك:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-[#0099DD]">
+                          {currentUser.assigned_sales_rep_name || 'سيتم التعيين تلقائياً'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsChangingRep(!isChangingRep);
+                            setChangeRepMessage(null);
+                            if (currentUser.assigned_sales_rep_id) {
+                              setChangeRepSelectedId(currentUser.assigned_sales_rep_id);
+                              setChangeRepMode('custom');
+                            }
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-bold bg-[#0099DD]/10 hover:bg-[#0099DD]/20 text-[#0099DD] rounded-md transition cursor-pointer"
+                        >
+                          {isChangingRep ? 'إلغاء' : 'تغيير المندوب'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Changing rep interactive form */}
+                    {isChangingRep && (
+                      <div className="p-3 bg-white border border-sky-200 rounded-xl space-y-2.5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="text-[11px] font-bold text-slate-800">
+                          اختر طريقة تحديد مندوب المبيعات:
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setChangeRepMode('auto')}
+                            className={`p-2 rounded-lg border text-right transition flex flex-col cursor-pointer ${
+                              changeRepMode === 'auto'
+                                ? 'border-[#0099DD] bg-sky-50 text-[#0099DD] font-bold ring-1 ring-[#0099DD]'
+                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                            }`}
+                          >
+                            <span className="text-[11px]">توزيع عادل تلقائي</span>
+                            <span className="text-[9px] text-slate-400 font-normal">تعيين المندوب الأقل تشغيلاً</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setChangeRepMode('custom');
+                              if (!changeRepSelectedId && availableReps.length > 0) {
+                                setChangeRepSelectedId(availableReps[0].id);
+                              }
+                            }}
+                            className={`p-2 rounded-lg border text-right transition flex flex-col cursor-pointer ${
+                              changeRepMode === 'custom'
+                                ? 'border-[#0099DD] bg-sky-50 text-[#0099DD] font-bold ring-1 ring-[#0099DD]'
+                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                            }`}
+                          >
+                            <span className="text-[11px]">اختيار مندوب محدد</span>
+                            <span className="text-[9px] text-slate-400 font-normal">تحديد المندوب بالاسم</span>
+                          </button>
+                        </div>
+
+                        {changeRepMode === 'custom' && (
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600">
+                              اختر مندوبك المعتمد:
+                            </label>
+                            <select
+                              value={changeRepSelectedId}
+                              onChange={(e) => setChangeRepSelectedId(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 font-medium focus:outline-none focus:border-[#0099DD] cursor-pointer"
+                            >
+                              {availableReps.map((rep) => (
+                                <option key={rep.id} value={rep.id}>
+                                  {rep.full_name} {rep.phone ? `(${rep.phone})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {changeRepMessage && (
+                          <div className={`p-2 rounded-lg text-[11px] font-bold flex items-center gap-1.5 ${
+                            changeRepMessage.type === 'success'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-red-50 text-red-700 border border-red-200'
+                          }`}>
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>{changeRepMessage.text}</span>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={changeRepLoading}
+                            onClick={async () => {
+                              setChangeRepLoading(true);
+                              setChangeRepMessage(null);
+                              const targetId = changeRepMode === 'custom' ? changeRepSelectedId : undefined;
+                              const res = await customerChangeSalesRep(targetId);
+                              setChangeRepLoading(false);
+                              if (res.success) {
+                                setChangeRepMessage({ type: 'success', text: res.message || 'تم تحديث المندوب بنجاح' });
+                                setTimeout(() => {
+                                  setIsChangingRep(false);
+                                  setChangeRepMessage(null);
+                                }, 1500);
+                              } else {
+                                setChangeRepMessage({ type: 'error', text: res.message || 'حدث خطأ أثناء التحديث' });
+                              }
+                            }}
+                            className="flex-1 bg-[#0099DD] hover:bg-[#007BB3] text-white py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                          >
+                            {changeRepLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
+                            <span>حفظ وتأكيد المندوب</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsChangingRep(false)}
+                            className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-semibold cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

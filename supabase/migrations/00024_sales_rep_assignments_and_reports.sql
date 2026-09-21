@@ -271,3 +271,152 @@ begin
   );
 end;
 $func$;
+
+-- ── 5. Allow Public/Customer to Read Active Sales Reps ───────────────────────
+drop policy if exists "Public can read active sales reps" on public.user_profiles;
+create policy "Public can read active sales reps"
+  on public.user_profiles for select
+  using (
+    is_active = true
+    and (
+      role in ('sales_agent', 'admin')
+      or exists (
+        select 1 from public.custom_roles cr
+        where cr.id = user_profiles.custom_role_id
+          and cr.can_receive_customers = true
+      )
+    )
+  );
+
+-- ── 6. RPC: sp_get_active_sales_reps (Security Definer) ───────────────────────
+create or replace function public.sp_get_active_sales_reps()
+returns table (
+  id uuid,
+  full_name text,
+  phone text,
+  role text,
+  custom_role_name text
+)
+language sql
+security definer
+stable
+as $func$
+  select 
+    up.id,
+    up.full_name,
+    up.phone,
+    up.role,
+    cr.name_ar as custom_role_name
+  from public.user_profiles up
+  left join public.custom_roles cr on up.custom_role_id = cr.id
+  where up.is_active = true
+    and (
+      up.role in ('sales_agent', 'admin')
+      or cr.can_receive_customers = true
+    )
+  order by up.full_name asc;
+$func$;
+
+-- ── 7. RPC: sp_customer_choose_sales_rep (Security Definer) ───────────────────
+create or replace function public.sp_customer_choose_sales_rep(
+  p_customer_id  uuid,
+  p_sales_rep_id uuid default null,
+  p_notes        text default null
+)
+returns jsonb
+language plpgsql
+security definer
+as $func$
+declare
+  v_customer_name    text;
+  v_customer_phone   text;
+  v_customer_company text;
+  v_old_rep_id       uuid;
+  v_old_rep_name     text;
+  v_new_rep_id       uuid;
+  v_new_rep_name     text;
+  v_new_rep_phone    text;
+  v_assignment_type  text;
+  v_notes            text;
+begin
+  select full_name, phone, company_name, assigned_sales_rep_id
+  into v_customer_name, v_customer_phone, v_customer_company, v_old_rep_id
+  from public.user_profiles
+  where id = p_customer_id and role = 'customer';
+
+  if not found then
+    return jsonb_build_object('success', false, 'message', 'العميل غير موجود');
+  end if;
+
+  if v_old_rep_id is not null then
+    select full_name into v_old_rep_name from public.user_profiles where id = v_old_rep_id;
+  end if;
+
+  if p_sales_rep_id is not null and exists (
+    select 1 from public.user_profiles where id = p_sales_rep_id and is_active = true
+  ) then
+    v_new_rep_id := p_sales_rep_id;
+    v_assignment_type := 'customer_choice';
+    v_notes := coalesce(nullif(trim(p_notes), ''), 'قام العميل باختيار هذا المندوب بنفسه من حسابه');
+  else
+    v_new_rep_id := public.fn_get_least_loaded_sales_rep();
+    v_assignment_type := 'auto_fair_distribution';
+    v_notes := 'طلب العميل إعادة التوزيع العادل التلقائي';
+  end if;
+
+  select full_name, phone into v_new_rep_name, v_new_rep_phone
+  from public.user_profiles
+  where id = v_new_rep_id;
+
+  update public.user_profiles
+  set assigned_sales_rep_id = v_new_rep_id,
+      updated_at = now()
+  where id = p_customer_id;
+
+  -- Reassign any pending orders to new rep
+  update public.orders
+  set sales_agent_id = v_new_rep_id
+  where customer_id = p_customer_id and status = 'pending';
+
+  -- Log into sales_rep_assignments (Data Log)
+  insert into public.sales_rep_assignments (
+    customer_id,
+    customer_name,
+    customer_phone,
+    customer_company,
+    sales_rep_id,
+    sales_rep_name,
+    previous_rep_id,
+    previous_rep_name,
+    assignment_type,
+    notes
+  ) values (
+    p_customer_id,
+    v_customer_name,
+    v_customer_phone,
+    v_customer_company,
+    v_new_rep_id,
+    v_new_rep_name,
+    v_old_rep_id,
+    v_old_rep_name,
+    v_assignment_type,
+    v_notes
+  );
+
+  return jsonb_build_object(
+    'success', true,
+    'message', 'تم تحديث المندوب المعتمد لخدمتك بنجاح',
+    'sales_rep_id', v_new_rep_id,
+    'sales_rep_name', v_new_rep_name,
+    'sales_rep_phone', v_new_rep_phone,
+    'assignment_type', v_assignment_type
+  );
+end;
+$func$;
+
+-- ── 8. Permissions & Grants ──────────────────────────────────────────────────
+grant execute on function public.sp_get_active_sales_reps() to authenticated, anon;
+grant execute on function public.sp_customer_choose_sales_rep(uuid, uuid, text) to authenticated, anon;
+grant execute on function public.fn_get_least_loaded_sales_rep() to authenticated, anon;
+grant select on public.sales_rep_assignments to authenticated, anon;
+grant insert on public.sales_rep_assignments to authenticated, anon;
