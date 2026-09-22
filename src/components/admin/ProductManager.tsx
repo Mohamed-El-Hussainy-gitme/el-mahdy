@@ -20,8 +20,10 @@ import {
   FileSpreadsheet,
   Image as ImageIcon,
   Loader2,
+  Eye,
+  ExternalLink,
 } from 'lucide-react';
-import { Product, Category, UserRole, UserProfile } from '@/types';
+import { Product, Category, UserRole, UserProfile, CustomRole } from '@/types';
 import { validateProductData, calculateMatrixStockSummary } from '@/services/productService';
 import { canManageProducts } from '@/services/authService';
 import { uploadProductImage } from '@/lib/storage';
@@ -31,6 +33,7 @@ interface ProductManagerProps {
   categories: Category[];
   currentRole: UserRole;
   staffProfile?: UserProfile | null;
+  customRoles?: CustomRole[];
   onAddProduct: (product: any) => void | Promise<any>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => void | Promise<void>;
   onDeleteProduct: (id: string) => any;
@@ -42,6 +45,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
   categories,
   currentRole,
   staffProfile,
+  customRoles,
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
@@ -50,6 +54,8 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  // Product card preview modal state
+  const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
 
   // Form states
   const [sku, setSku] = useState('');
@@ -71,7 +77,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
   const galleryFileInputRef = React.useRef<HTMLInputElement>(null);
   const csvInputRef = React.useRef<HTMLInputElement>(null);
 
-  const isAdmin = canManageProducts(currentRole, staffProfile);
+  const isAdmin = canManageProducts(currentRole, staffProfile, customRoles);
 
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return products;
@@ -349,13 +355,14 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                 <th className="p-3.5">التصنيفات المربوطة</th>
                 <th className="p-3.5">مصفوفة التوافق</th>
                 <th className="p-3.5">الحالة والخصائص</th>
+                <th className="p-3.5 text-center">معاينة</th>
                 {isAdmin && <th className="p-3.5 text-center">الإجراءات</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 8 : 6} className="text-center py-12 text-slate-400">
+                  <td colSpan={isAdmin ? 9 : 7} className="text-center py-12 text-slate-400">
                     لا توجد منتجات مطابقة لعملية البحث.
                   </td>
                 </tr>
@@ -471,6 +478,18 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                         </div>
                       </td>
 
+                      {/* Preview button (visible to all staff) */}
+                      <td className="p-3.5 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewProduct(p)}
+                          className="p-1.5 rounded-lg bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200 transition"
+                          title="معاينة بطاقة المنتج"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+
                       {/* Action buttons (Admin only) */}
                       {isAdmin && (
                         <td className="p-3.5 text-center whitespace-nowrap">
@@ -500,6 +519,161 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
           </table>
         </div>
       </div>
+
+      {/* ── Product Card Preview Modal ────────────────────────────────────────── */}
+      {previewProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setPreviewProduct(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 text-violet-600" />
+                <span className="font-extrabold text-slate-900 text-sm">معاينة بطاقة المنتج</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/products/${previewProduct.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-[#0099DD] hover:bg-[#007BB3] text-white rounded-lg text-[11px] font-bold transition"
+                  title="فتح صفحة المنتج في تبويب جديد"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>فتح الصفحة</span>
+                </a>
+                <button
+                  onClick={() => setPreviewProduct(null)}
+                  className="w-7 h-7 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Card Preview Body */}
+            <div className="p-4 bg-slate-50">
+              {/* Mini product card matching storefront style */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+                {/* Product Image */}
+                <div className="relative p-3">
+                  <div className="relative w-full h-48 rounded-xl overflow-hidden bg-slate-50 border border-slate-100">
+                    <Image
+                      src={previewProduct.image_url || '/placeholder.svg'}
+                      alt={previewProduct.title_ar}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 400px) 100vw, 400px"
+                    />
+                  </div>
+                  {/* Badges */}
+                  <div className="absolute top-5 right-5 flex flex-col gap-1">
+                    {previewProduct.is_featured && (
+                      <span className="bg-[#0099DD] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                        مميز ⭐
+                      </span>
+                    )}
+                    {previewProduct.is_exchange_only && (
+                      <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                        استبدال فقط
+                      </span>
+                    )}
+                    {!previewProduct.is_active && (
+                      <span className="bg-slate-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                        مخفي
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Product Details */}
+                <div className="px-4 pb-4 space-y-2">
+                  {/* SKU */}
+                  <div className="text-[10px] text-slate-400 font-mono font-semibold">{previewProduct.sku}</div>
+
+                  {/* Title */}
+                  <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">
+                    {previewProduct.title_ar}
+                  </h3>
+
+                  {/* Description */}
+                  {previewProduct.description_ar && (
+                    <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                      {previewProduct.description_ar}
+                    </p>
+                  )}
+
+                  {/* Price */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span className="font-extrabold text-[#0099DD] text-lg">
+                      {previewProduct.price.toFixed(2)}{' '}
+                      <span className="text-xs font-bold text-slate-500">ج.م</span>
+                    </span>
+                    {/* Categories */}
+                    <div className="flex flex-wrap gap-1 justify-end max-w-[55%]">
+                      {categories
+                        .filter((c) => previewProduct.category_ids?.includes(c.id))
+                        .slice(0, 2)
+                        .map((c) => (
+                          <span
+                            key={c.id}
+                            className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[9px] font-medium"
+                          >
+                            {c.name_ar}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Matrix info */}
+                  {previewProduct.has_compatibility_matrix && (
+                    <div className="flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                      <Boxes className="w-3 h-3 shrink-0" />
+                      <span>متوافق مع {previewProduct.matrix_items?.length || 0} موديل</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Gallery preview if any */}
+              {previewProduct.gallery_urls && previewProduct.gallery_urls.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] text-slate-500 font-bold mb-2">معرض الصور:</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {previewProduct.gallery_urls.map((url, idx) => (
+                      <div key={idx} className="relative w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                        <Image
+                          src={url}
+                          alt={`gallery-${idx + 1}`}
+                          fill
+                          className="object-cover"
+                          sizes="56px"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">هذه معاينة كما تظهر للعملاء</span>
+              <button
+                onClick={() => setPreviewProduct(null)}
+                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Product Modal */}
       {isModalOpen && (

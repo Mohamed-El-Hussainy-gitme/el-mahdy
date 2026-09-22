@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 function getSupabaseAdmin() {
@@ -42,8 +42,18 @@ async function verifyProductManager(request: NextRequest, supabaseAdmin: any) {
     return { error: 'تعذر العثور على ملف تعريف المستخدم', status: 403 };
   }
 
+  let customRole = callerProfile.custom_role;
+  if (!customRole && callerProfile.custom_role_id) {
+    const { data: crData } = await supabaseAdmin
+      .from('custom_roles')
+      .select('*')
+      .eq('id', callerProfile.custom_role_id)
+      .maybeSingle();
+    if (crData) customRole = crData;
+  }
+
   const isAdmin = callerProfile.role === 'admin';
-  const hasCustomPerm = callerProfile.custom_role?.can_manage_products === true;
+  const hasCustomPerm = customRole?.can_manage_products === true;
 
   if (!isAdmin && !hasCustomPerm) {
     return {

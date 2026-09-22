@@ -21,15 +21,18 @@ import {
   Layers,
   Loader2,
 } from 'lucide-react';
-import { Product, MasterModel, StockStatus, UserRole, UserProfile } from '@/types';
+import { Product, MasterModel, StockStatus, UserRole, UserProfile, CustomRole } from '@/types';
 import { canManageMatrix } from '@/services/authService';
 import { calculateStockStatus } from '@/services/matrixService';
+import { useStore } from '@/context/StoreContext';
+
 
 interface CompatibilityMatrixManagerProps {
   products: Product[];
   masterModels: MasterModel[];
   currentRole: UserRole;
   staffProfile?: UserProfile | null;
+  customRoles?: CustomRole[];
   onAddModelToMatrix: (productId: string, modelId: string, stock: number, moq: number) => void | Promise<any>;
   onBulkAddModelToMatrix?: (productId: string, items: Array<{ model_id: string; stock_quantity: number; moq: number }>) => void | Promise<any>;
   onUpdateMatrixItem: (
@@ -111,7 +114,9 @@ export const CompatibilityMatrixManager: React.FC<CompatibilityMatrixManagerProp
   const [editStock, setEditStock] = useState<number>(0);
   const [editMoq, setEditMoq] = useState<number>(1);
 
-  const isAdmin = canManageMatrix(currentRole, staffProfile);
+  const { customRoles } = useStore();
+  const isAdmin = canManageMatrix(currentRole, staffProfile, customRoles);
+
   const selectedProduct = products.find((p) => p.id === selectedProductId);
 
   const handleStartEdit = (itemId: string, currentStock: number, currentMoq: number) => {

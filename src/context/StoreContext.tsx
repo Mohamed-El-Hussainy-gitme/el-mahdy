@@ -750,6 +750,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setCustomRoles(dbRoles as CustomRole[]);
       }
 
+      // Refresh active staff session permissions to reflect custom role updates
+      const savedStaffStr = typeof window !== 'undefined' ? localStorage.getItem('mh_mahdy_staff') : null;
+      let activeStaffId = staffSession?.id;
+      if (!activeStaffId && savedStaffStr) {
+        try { activeStaffId = JSON.parse(savedStaffStr)?.id; } catch {}
+      }
+
+      if (activeStaffId) {
+        try {
+          const { data: latestProfile } = await supabase
+            .from('user_profiles')
+            .select('*, custom_role:custom_roles(*)')
+            .eq('id', activeStaffId)
+            .maybeSingle();
+
+          if (latestProfile && latestProfile.role !== 'customer') {
+            const allRoles = (dbRoles && dbRoles.length > 0) ? (dbRoles as CustomRole[]) : customRoles;
+            let resolvedCr = latestProfile.custom_role;
+            if (!resolvedCr && (latestProfile.custom_role_id || latestProfile.custom_role_name)) {
+              resolvedCr = allRoles.find(
+                (r) => r.id === latestProfile.custom_role_id || r.name_ar === latestProfile.custom_role_name
+              );
+            }
+            const fullProfile: UserProfile = {
+              ...latestProfile,
+              custom_role: resolvedCr || latestProfile.custom_role,
+            };
+            setStaffSession(fullProfile);
+            try { localStorage.setItem('mh_mahdy_staff', JSON.stringify(fullProfile)); } catch {}
+          }
+        } catch (profileSyncErr) {
+          console.warn('Failed to sync staff session profile:', profileSyncErr);
+        }
+      }
+
+
       // Sales Rep Assignments Data Log
       const { data: dbAssignments } = await supabase
         .from('sales_rep_assignments')
@@ -859,6 +895,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshData]);
 
+  // Keep staffSession custom_role dynamically synced with the latest customRoles permissions
+  useEffect(() => {
+    if (!staffSession) return;
+    if (staffSession.custom_role_id || staffSession.custom_role_name) {
+      const match = customRoles.find(
+        (r) => r.id === staffSession.custom_role_id || r.name_ar === staffSession.custom_role_name
+      );
+      if (match) {
+        const isDifferent =
+          !staffSession.custom_role ||
+          staffSession.custom_role.can_manage_categories !== match.can_manage_categories ||
+          staffSession.custom_role.can_manage_products !== match.can_manage_products ||
+          staffSession.custom_role.can_manage_matrix !== match.can_manage_matrix ||
+          staffSession.custom_role.can_manage_orders !== match.can_manage_orders ||
+          staffSession.custom_role.can_manage_customers !== match.can_manage_customers ||
+          staffSession.custom_role.can_manage_shortages !== match.can_manage_shortages ||
+          staffSession.custom_role.can_manage_settings !== match.can_manage_settings;
+
+        if (isDifferent) {
+          const updated = { ...staffSession, custom_role: match };
+          setStaffSession(updated);
+          try { localStorage.setItem('mh_mahdy_staff', JSON.stringify(updated)); } catch {}
+        }
+      }
+    }
+  }, [customRoles, staffSession]);
+
+
   // Persist state changes locally for cache/offline resilience
   useEffect(() => {
     try { localStorage.setItem('mh_mahdy_categories', JSON.stringify(categories)); } catch {}
@@ -910,16 +974,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase.from('categories').insert({
-          id: newCat.id,
-          name_ar: newCat.name_ar,
-          slug: newCat.slug,
-          parent_id: newCat.parent_id,
-          icon: newCat.icon,
-          image_url: newCat.image_url || null,
-          sort_order: newCat.sort_order,
-          is_active: newCat.is_active,
-        });
+        const token = await getAuthToken();
+        if (token) {
+          const res = await fetch('/api/admin/categories', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(newCat),
+          });
+          const resData = await res.json();
+          if (!res.ok || !resData.success) {
+            console.warn('API addCategory fallback to direct supabase:', resData.error);
+            await supabase.from('categories').insert({
+              id: newCat.id,
+              name_ar: newCat.name_ar,
+              slug: newCat.slug,
+              parent_id: newCat.parent_id,
+              icon: newCat.icon,
+              image_url: newCat.image_url || null,
+              sort_order: newCat.sort_order,
+              is_active: newCat.is_active,
+            });
+          }
+        } else {
+          await supabase.from('categories').insert({
+            id: newCat.id,
+            name_ar: newCat.name_ar,
+            slug: newCat.slug,
+            parent_id: newCat.parent_id,
+            icon: newCat.icon,
+            image_url: newCat.image_url || null,
+            sort_order: newCat.sort_order,
+            is_active: newCat.is_active,
+          });
+        }
       } catch (err) {
         console.warn('Supabase addCategory sync error:', err);
       }
@@ -943,24 +1033,54 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase
-          .from('categories')
-          .update({
-            ...(updated.name_ar && { name_ar: updated.name_ar }),
-            ...(updated.slug && { slug: updated.slug }),
-            ...(updated.parent_id !== undefined && { parent_id: updated.parent_id }),
-            ...(updated.icon !== undefined && { icon: updated.icon }),
-            ...(updated.image_url !== undefined && { image_url: updated.image_url || null }),
-            ...(updated.sort_order !== undefined && { sort_order: updated.sort_order }),
-            ...(updated.is_active !== undefined && { is_active: updated.is_active }),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', id);
+        const token = await getAuthToken();
+        if (token) {
+          const res = await fetch('/api/admin/categories', {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ id, ...updated }),
+          });
+          const resData = await res.json();
+          if (!res.ok || !resData.success) {
+            console.warn('API updateCategory fallback to direct supabase:', resData.error);
+            await supabase
+              .from('categories')
+              .update({
+                ...(updated.name_ar && { name_ar: updated.name_ar }),
+                ...(updated.slug && { slug: updated.slug }),
+                ...(updated.parent_id !== undefined && { parent_id: updated.parent_id }),
+                ...(updated.icon !== undefined && { icon: updated.icon }),
+                ...(updated.image_url !== undefined && { image_url: updated.image_url || null }),
+                ...(updated.sort_order !== undefined && { sort_order: updated.sort_order }),
+                ...(updated.is_active !== undefined && { is_active: updated.is_active }),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', id);
+          }
+        } else {
+          await supabase
+            .from('categories')
+            .update({
+              ...(updated.name_ar && { name_ar: updated.name_ar }),
+              ...(updated.slug && { slug: updated.slug }),
+              ...(updated.parent_id !== undefined && { parent_id: updated.parent_id }),
+              ...(updated.icon !== undefined && { icon: updated.icon }),
+              ...(updated.image_url !== undefined && { image_url: updated.image_url || null }),
+              ...(updated.sort_order !== undefined && { sort_order: updated.sort_order }),
+              ...(updated.is_active !== undefined && { is_active: updated.is_active }),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+        }
       } catch (err) {
         console.warn('Supabase updateCategory sync error:', err);
       }
     }
   };
+
 
   const deleteCategory = async (id: string): Promise<{ success: boolean; message?: string }> => {
     const validation = validateCategoryDeletion(categories, id, products);

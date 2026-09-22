@@ -10,6 +10,7 @@ export default function AdminMatrixPage() {
     products,
     masterModels,
     staffSession,
+    customRoles,
     addModelToMatrix,
     bulkAddModelsToMatrix,
     updateMatrixItem,
@@ -18,7 +19,7 @@ export default function AdminMatrixPage() {
     deleteMasterModel,
   } = useStore();
 
-  if (!staffSession || (!canManageMatrix(staffSession.role, staffSession) && staffSession.role !== 'warehouse_preparer')) return null;
+  if (!staffSession || (!canManageMatrix(staffSession.role, staffSession, customRoles) && staffSession.role !== 'warehouse_preparer')) return null;
 
   return (
     <CompatibilityMatrixManager
@@ -26,6 +27,7 @@ export default function AdminMatrixPage() {
       masterModels={masterModels}
       currentRole={staffSession.role}
       staffProfile={staffSession}
+      customRoles={customRoles}
       onAddModelToMatrix={addModelToMatrix}
       onBulkAddModelToMatrix={bulkAddModelsToMatrix}
       onUpdateMatrixItem={updateMatrixItem}

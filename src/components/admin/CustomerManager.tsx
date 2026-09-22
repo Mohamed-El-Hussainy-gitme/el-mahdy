@@ -31,14 +31,15 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
-import { UserProfile, UserRole, AssignmentType, Order } from '@/types';
+import { UserProfile, UserRole, AssignmentType, Order, CustomRole } from '@/types';
 
 interface CustomerManagerProps {
   currentRole: UserRole;
   staffProfile?: UserProfile | null;
+  customRoles?: CustomRole[];
 }
 
-export function CustomerManager({ currentRole, staffProfile }: CustomerManagerProps) {
+export function CustomerManager({ currentRole, staffProfile, customRoles: _customRoles }: CustomerManagerProps) {
   const {
     customers,
     orders,

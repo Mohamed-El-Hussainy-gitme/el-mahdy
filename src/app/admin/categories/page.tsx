@@ -11,12 +11,14 @@ export default function AdminCategoriesPage() {
     categoriesTree,
     products,
     staffSession,
+    customRoles,
     addCategory,
     updateCategory,
     deleteCategory,
   } = useStore();
 
-  if (!staffSession || !canManageCategories(staffSession.role, staffSession)) return null;
+  if (!staffSession || !canManageCategories(staffSession.role, staffSession, customRoles)) return null;
+
 
   return (
     <CategoryTreeManager

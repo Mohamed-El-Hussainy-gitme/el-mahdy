@@ -6,15 +6,15 @@ import { CustomerManager } from '@/components/admin/CustomerManager';
 import { canManageCustomers } from '@/services/authService';
 
 export default function AdminCustomersPage() {
-  const { staffSession } = useStore();
+  const { staffSession, customRoles } = useStore();
 
   if (
     !staffSession ||
-    (!canManageCustomers(staffSession.role, staffSession) &&
+    (!canManageCustomers(staffSession.role, staffSession, customRoles) &&
       !staffSession.custom_role?.can_receive_customers)
   ) {
     return null;
   }
 
-  return <CustomerManager currentRole={staffSession.role} staffProfile={staffSession} />;
+  return <CustomerManager currentRole={staffSession.role} staffProfile={staffSession} customRoles={customRoles} />;
 }

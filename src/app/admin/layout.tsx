@@ -26,7 +26,7 @@ import { UserRole } from '@/types';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { staffSession, staffLogout, orders, products, categories, shortages, isLoading } = useStore();
+  const { staffSession, staffLogout, orders, products, categories, shortages, customRoles, isLoading } = useStore();
 
   const userRole = (staffSession?.role as string) === 'warehouse'
     ? 'warehouse_preparer'
@@ -35,12 +35,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Dynamic route security guard: smoothly redirect users if they navigate to an unauthorized path
   React.useEffect(() => {
     if (staffSession && pathname && !pathname.startsWith('/admin/login')) {
-      if (!canAccessAdminRoute(userRole, pathname, staffSession)) {
-        const fallback = getDefaultAdminRoute(userRole, staffSession);
+      if (!canAccessAdminRoute(userRole, pathname, staffSession, customRoles)) {
+        const fallback = getDefaultAdminRoute(userRole, staffSession, customRoles);
         router.replace(fallback);
       }
     }
-  }, [staffSession, userRole, pathname, router]);
+  }, [staffSession, userRole, pathname, router, customRoles]);
+
 
   // If login page, don't show admin chrome
   if (pathname.startsWith('/admin/login')) {
@@ -60,7 +61,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // Guard: Not logged in or customer role
-  if (!staffSession || !canViewDashboard(staffSession.role, staffSession)) {
+  if (!staffSession || !canViewDashboard(staffSession.role, staffSession, customRoles)) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans" dir="rtl">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-200 text-center space-y-4">
@@ -159,8 +160,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   const navItems = allNavCandidateItems.filter((item) =>
-    canAccessAdminRoute(userRole, item.href, staffSession)
+    canAccessAdminRoute(userRole, item.href, staffSession, customRoles)
   );
+
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-900" dir="rtl">

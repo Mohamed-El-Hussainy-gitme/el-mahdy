@@ -13,13 +13,14 @@ import {
   Smartphone,
   Search,
 } from 'lucide-react';
-import { ShortageRequest, UserRole, UserProfile } from '@/types';
+import { ShortageRequest, UserRole, UserProfile, CustomRole } from '@/types';
 import { canManageShortages } from '@/services/authService';
 
 interface ShortagesManagerProps {
   shortages: ShortageRequest[];
   currentRole: UserRole;
   staffProfile?: UserProfile | null;
+  customRoles?: CustomRole[];
   onUpdateShortageStatus: (id: string, status: 'pending' | 'reviewed') => void | Promise<any>;
 }
 
@@ -27,9 +28,10 @@ export const ShortagesManager: React.FC<ShortagesManagerProps> = ({
   shortages,
   currentRole,
   staffProfile,
+  customRoles,
   onUpdateShortageStatus,
 }) => {
-  const isAllowed = canManageShortages(currentRole, staffProfile);
+  const isAllowed = canManageShortages(currentRole, staffProfile, customRoles);
   const [viewMode, setViewMode] = useState<'aggregated' | 'individual'>('aggregated');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'reviewed'>('all');

@@ -34,6 +34,8 @@ import { Category, Product, UserRole, UserProfile } from '@/types';
 import { validateCategoryDeletion } from '@/services/categoryService';
 import { canManageCategories } from '@/services/authService';
 import { uploadImage } from '@/lib/storage';
+import { useStore } from '@/context/StoreContext';
+
 
 const AVAILABLE_ICONS = [
   'Folder',
@@ -109,7 +111,9 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const isAdmin = canManageCategories(currentRole, staffProfile);
+  const { customRoles } = useStore();
+  const isAdmin = canManageCategories(currentRole, staffProfile, customRoles);
+
 
   const toggleCollapse = (id: string) => {
     setCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -347,7 +351,8 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
         ) : (
           <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-xl text-xs font-semibold border border-amber-200">
             <ShieldAlert className="w-4 h-4" />
-            <span>عرض فقط (إدارة التصنيفات تتطلب صلاحية مدير النظام)</span>
+            <span>عرض فقط (إدارة وتعديل الكتالوجات تتطلب صلاحية إدارة التصنيفات أو مدير النظام)</span>
+
           </div>
         )}
       </div>

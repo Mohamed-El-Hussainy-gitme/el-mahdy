@@ -6,9 +6,9 @@ import { SettingsManager } from '@/components/admin/SettingsManager';
 import { canManageSettings } from '@/services/authService';
 
 export default function AdminSettingsPage() {
-  const { staffSession } = useStore();
+  const { staffSession, customRoles } = useStore();
 
-  if (!staffSession || !canManageSettings(staffSession.role, staffSession)) return null;
+  if (!staffSession || !canManageSettings(staffSession.role, staffSession, customRoles)) return null;
 
-  return <SettingsManager currentRole={staffSession.role} staffProfile={staffSession} />;
+  return <SettingsManager currentRole={staffSession.role} staffProfile={staffSession} customRoles={customRoles} />;
 }

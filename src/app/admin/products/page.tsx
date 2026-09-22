@@ -9,6 +9,7 @@ export default function AdminProductsPage() {
     products,
     categories,
     staffSession,
+    customRoles,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -23,6 +24,7 @@ export default function AdminProductsPage() {
       categories={categories}
       currentRole={staffSession.role}
       staffProfile={staffSession}
+      customRoles={customRoles}
       onAddProduct={addProduct}
       onUpdateProduct={updateProduct}
       onDeleteProduct={deleteProduct}
