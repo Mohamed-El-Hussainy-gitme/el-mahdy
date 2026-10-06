@@ -29,7 +29,11 @@ function CatalogSection() {
     products,
     openCompatibilityModal,
     addToCart,
+    currentUser,
+    openAccountModalWithTab,
   } = useStore();
+
+  const isApproved = !!currentUser && (currentUser.approval_status === 'approved' || !currentUser.approval_status);
 
   const handleSelectCatalog = (slug: string, brand?: string) => {
     setSelectedCategorySlug(slug);
@@ -308,28 +312,42 @@ function CatalogSection() {
                       {item.title_ar}
                     </h5>
                   </Link>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-xs font-black text-slate-900">
-                      {item.price.toFixed(2)} <span className="text-[10px] font-normal text-slate-500">ج.م</span>
-                    </span>
-                    {item.has_compatibility_matrix ? (
-                      <button
-                        type="button"
-                        onClick={() => openCompatibilityModal(item)}
-                        className="text-[10px] text-[#0099DD] font-bold hover:underline"
-                      >
-                        الموديلات
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => addToCart(item)}
-                        className="text-[10px] bg-[#0099DD] text-white px-2 py-0.5 rounded font-bold hover:bg-[#007BB3]"
-                      >
-                        شراء
-                      </button>
-                    )}
-                  </div>
+                  {isApproved ? (
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xs font-black text-slate-900">
+                        {item.price.toFixed(2)} <span className="text-[10px] font-normal text-slate-500">ج.م</span>
+                      </span>
+                      {item.has_compatibility_matrix ? (
+                        <button
+                          type="button"
+                          onClick={() => openCompatibilityModal(item)}
+                          className="text-[10px] text-[#0099DD] font-bold hover:underline"
+                        >
+                          الموديلات
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => addToCart(item)}
+                          className="text-[10px] bg-[#0099DD] text-white px-2 py-0.5 rounded font-bold hover:bg-[#007BB3]"
+                        >
+                          شراء
+                        </button>
+                      )}
+                    </div>
+                  ) : currentUser ? (
+                    <div className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded text-center">
+                      قيد المراجعة
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openAccountModalWithTab('register')}
+                      className="text-[10px] text-[#0099DD] font-bold hover:underline block text-center w-full"
+                    >
+                      سجل لعرض السعر
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

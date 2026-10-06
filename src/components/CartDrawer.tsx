@@ -389,6 +389,16 @@ export default function CartDrawer() {
                         </button>
                       </div>
                     </div>
+                  ) : currentUser.approval_status !== 'approved' ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-2">
+                      <p className="font-bold flex items-center gap-1.5">
+                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                        حسابك قيد المراجعة والاعتماد
+                      </p>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        لا يمكن إتمام الطلب في الوقت الحالي. سيتم تفعيل إمكانية تأكيد الطلبات فور اعتماد حسابك من قبل الإدارة.
+                      </p>
+                    </div>
                   ) : (
                     <>
                       <div>
@@ -435,7 +445,7 @@ export default function CartDrawer() {
 
                     <button
                       type="submit"
-                      disabled={!currentUser || isSubmittingOrder}
+                      disabled={!currentUser || currentUser.approval_status !== 'approved' || isSubmittingOrder}
                       className="w-full bg-[#0099DD] hover:bg-[#007BB3] disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold text-xs shadow transition flex items-center justify-center gap-2"
                     >
                       {isSubmittingOrder ? (
@@ -443,6 +453,8 @@ export default function CartDrawer() {
                           <Loader2 className="w-4 h-4 animate-spin" />
                           <span>جاري إرسال الطلب للمراجعة...</span>
                         </>
+                      ) : currentUser && currentUser.approval_status !== 'approved' ? (
+                        <span>بانتظار اعتماد الحساب للطلب</span>
                       ) : (
                         <>
                           <Send className="w-4 h-4" />

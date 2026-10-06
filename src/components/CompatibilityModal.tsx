@@ -19,10 +19,12 @@ import { MasterModel } from '@/types';
 import { enforceModelMOQ } from '@/services/matrixService';
 
 export default function CompatibilityModal() {
-  const { compatibilityProduct, closeCompatibilityModal, addToCart } = useStore();
+  const { compatibilityProduct, closeCompatibilityModal, addToCart, currentUser, openAccountModalWithTab } = useStore();
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
   const [searchModel, setSearchModel] = useState<string>('');
   
+  const isApproved = !!currentUser && (currentUser.approval_status === 'approved' || !currentUser.approval_status);
+
   // Model quantities mapped by modelId
   const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
 
@@ -113,7 +115,7 @@ export default function CompatibilityModal() {
             <div className="text-left hidden sm:block">
               <div className="text-[11px] text-slate-400">سعر القطعة الموحد</div>
               <div className="font-black text-sm text-sky-400">
-                {compatibilityProduct.price.toFixed(2)} ج.م
+                {isApproved ? `${compatibilityProduct.price.toFixed(2)} ج.م` : 'مخصص للتجار'}
               </div>
             </div>
             <button
@@ -125,8 +127,61 @@ export default function CompatibilityModal() {
           </div>
         </div>
 
-        {/* Filter Controls Bar */}
-        <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2.5">
+        {!isApproved ? (
+          <div className="p-8 text-center space-y-4 my-auto">
+            <div className="w-14 h-14 bg-sky-50 text-[#0099DD] rounded-2xl flex items-center justify-center mx-auto border border-sky-100 shadow-xs">
+              <Smartphone className="w-7 h-7" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="font-extrabold text-base text-slate-900">
+                مصفوفة الموديلات والطلب مقصورة على العملاء المعتمدين
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                لرؤية تفاصيل توافق الموديلات والأسعار الخاصة وإضافة الكميات المطلوبة للسلة، يرجى تسجيل الدخول بحساب تاجر معتمد أو إنشاء حساب جديد.
+              </p>
+            </div>
+            {!currentUser ? (
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCompatibilityModal();
+                    openAccountModalWithTab('register');
+                  }}
+                  className="bg-[#0099DD] hover:bg-[#007BB3] text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow transition cursor-pointer"
+                >
+                  إنشاء حساب تاجر جديد
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCompatibilityModal();
+                    openAccountModalWithTab('login');
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
+                >
+                  تسجيل الدخول
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold max-w-sm mx-auto">
+                ⏳ حسابك قيد المراجعة والاعتماد من قبل الإدارة. ستتاح مصفوفة الموديلات فور الاعتماد.
+              </div>
+            )}
+            <div className="pt-4">
+              <button
+                type="button"
+                onClick={closeCompatibilityModal}
+                className="px-6 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-semibold"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Filter Controls Bar */}
+            <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2.5">
           {/* Brand Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             <button
@@ -325,6 +380,8 @@ export default function CompatibilityModal() {
             </button>
           </div>
         </div>
+      </>
+    )}
 
       </div>
     </div>

@@ -85,6 +85,7 @@ export function ExecutiveDashboard() {
       limitedStockCount,
       pendingShortagesCount: pendingShortages.length,
       customersCount: relevantCustomers.length,
+      pendingCustomersCount: customers.filter((c) => c.approval_status === 'pending').length,
     };
   }, [orders, products, customers, shortages, isSalesAgent, staffSession]);
 
@@ -172,6 +173,32 @@ export function ExecutiveDashboard() {
           </span>
         </div>
       </div>
+
+      {/* Pending Customer Approvals Alert Banner */}
+      {stats.pendingCustomersCount > 0 && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="text-xs">
+              <div className="font-extrabold text-sm text-amber-950">
+                يوجد ({stats.pendingCustomersCount}) طلبات تسجيل عملاء بانتظار الموافقة والاعتماد!
+              </div>
+              <p className="text-amber-800 mt-0.5">
+                العملاء الجدد لا يمكنهم استعراض الأسعار أو إرسال الطلبات إلا بعد موافقة الإدارة على الحساب.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin/customers"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center justify-center gap-1.5 shrink-0 self-start sm:self-auto"
+          >
+            <span>مراجعة واعتماد العملاء</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Stale Orders Warning Banner (> 48 hours pending) */}
       {stats.staleOrders.length > 0 && (

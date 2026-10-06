@@ -15,7 +15,7 @@ const nextConfig = {
   },
 
   images: {
-    unoptimized: true,
+    // unoptimized was removed — Next.js now auto-converts to WebP, resizes, and lazy-loads
     remotePatterns: [
       {
         protocol: 'https',

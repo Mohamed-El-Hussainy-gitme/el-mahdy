@@ -48,6 +48,8 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
     adminUpdateCustomer,
     adminToggleCustomerActive,
     adminDeleteCustomer,
+    adminApproveCustomer,
+    adminRejectCustomer,
     refreshData,
     staffSession,
     staffMembers,
@@ -60,12 +62,18 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
   const isSalesAgent = !isAdmin && (currentRole === 'sales_agent' || !!effectiveProfile?.custom_role?.can_receive_customers);
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'customers' | 'reports' | 'logs'>('customers');
+  const [activeTab, setActiveTab] = useState<'customers' | 'pending' | 'reports' | 'logs'>('customers');
 
   // Customer List Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRepFilter, setSelectedRepFilter] = useState<string>('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all');
+
+  // Pending Approvals State
+  const [rejectingCustomer, setRejectingCustomer] = useState<UserProfile | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [approvalActionLoadingId, setApprovalActionLoadingId] = useState<string | null>(null);
+  const [approvalToast, setApprovalToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Refresh indicator
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -156,6 +164,16 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
     return map;
   }, [orders]);
 
+  // Pending Approvals List
+  const pendingCustomers = useMemo(() => {
+    return customers.filter((c) => {
+      if (isSalesAgent && staffSession && c.assigned_sales_rep_id !== staffSession.id) {
+        return false;
+      }
+      return c.approval_status === 'pending';
+    });
+  }, [customers, isSalesAgent, staffSession]);
+
   // Filtered Customers
   const filteredCustomers = useMemo(() => {
     return customers.filter((c) => {
@@ -181,7 +199,8 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
       const matchStatus =
         selectedStatusFilter === 'all' ||
         (selectedStatusFilter === 'active' && c.is_active !== false) ||
-        (selectedStatusFilter === 'inactive' && c.is_active === false);
+        (selectedStatusFilter === 'inactive' && c.is_active === false) ||
+        (selectedStatusFilter === 'pending' && c.approval_status === 'pending');
 
       return matchSearch && matchRep && matchStatus;
     });
@@ -490,6 +509,27 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
           </button>
 
           <button
+            onClick={() => setActiveTab('pending')}
+            className={`flex items-center gap-2 pb-3 px-3 text-xs font-bold transition border-b-2 cursor-pointer ${
+              activeTab === 'pending'
+                ? 'border-amber-500 text-amber-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-amber-500" />
+            <span>طلبات قيد المراجعة</span>
+            {pendingCustomers.length > 0 ? (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-black animate-pulse">
+                {pendingCustomers.length}
+              </span>
+            ) : (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">
+                0
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('reports')}
             className={`flex items-center gap-2 pb-3 px-3 text-xs font-bold transition border-b-2 cursor-pointer ${
               activeTab === 'reports'
@@ -584,6 +624,7 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
                     <th className="p-3.5">المندوب المعتمد (Sticky Rep)</th>
                     <th className="p-3.5">طريقة الإسناد</th>
                     <th className="p-3.5">الطلبات والمشتريات</th>
+                    <th className="p-3.5">حالة الاعتماد</th>
                     <th className="p-3.5">تاريخ التسجيل</th>
                     {isAdmin && <th className="p-3.5 text-center">إجراءات الإدارة</th>}
                   </tr>
@@ -591,7 +632,7 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
                 <tbody className="divide-y divide-slate-100">
                   {filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-12 text-slate-400">
+                      <td colSpan={8} className="text-center py-12 text-slate-400">
                         لا يوجد عملاء مطابقون للبحث الحالي.
                       </td>
                     </tr>
@@ -667,15 +708,63 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
                             </div>
                           </td>
 
+                          {/* Approval Status */}
+                          <td className="p-3.5 whitespace-nowrap">
+                            {c.approval_status === 'pending' ? (
+                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                                <Clock className="w-3 h-3 text-amber-500 animate-pulse" />
+                                <span>بانتظار الاعتماد</span>
+                              </span>
+                            ) : c.approval_status === 'rejected' ? (
+                              <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold" title={c.rejection_reason || 'تم الرفض'}>
+                                <X className="w-3 h-3 text-rose-500" />
+                                <span>مرفوض</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                                <Check className="w-3 h-3 text-emerald-500" />
+                                <span>معتمد</span>
+                              </span>
+                            )}
+                          </td>
+
                           {/* Created At */}
-                          <td className="p-3.5 text-slate-500 text-[11px] font-mono">
+                          <td className="p-3.5 text-slate-500 text-[11px] font-mono whitespace-nowrap">
                             {c.created_at ? new Date(c.created_at).toLocaleDateString('ar-EG') : 'مسجل'}
                           </td>
 
                           {/* Admin Actions */}
                           {isAdmin && (
-                            <td className="p-3.5 text-center">
+                            <td className="p-3.5 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center gap-1">
+                                {c.approval_status === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={async () => {
+                                        setApprovalActionLoadingId(c.id);
+                                        const res = await adminApproveCustomer(c.id);
+                                        setApprovalActionLoadingId(null);
+                                        setApprovalToast({ type: res.success ? 'success' : 'error', message: res.message || 'تم الاعتماد' });
+                                        setTimeout(() => setApprovalToast(null), 3000);
+                                      }}
+                                      disabled={approvalActionLoadingId === c.id}
+                                      title="قبول واعتماد العميل فوراً"
+                                      className="p-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition cursor-pointer shadow-xs"
+                                    >
+                                      {approvalActionLoadingId === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setRejectingCustomer(c);
+                                        setRejectionReasonInput('');
+                                      }}
+                                      title="رفض طلب العميل"
+                                      className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-lg transition cursor-pointer shadow-xs"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
                                 <button
                                   onClick={() => openTransferModal(c)}
                                   title="تحويل المندوب"
@@ -721,6 +810,145 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
                               </div>
                             </td>
                           )}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {/* TAB: PENDING CUSTOMER APPROVALS                                        */}
+      {/* ════════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'pending' && (
+        <div className="space-y-4">
+          <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900">طلبات تسجيل العملاء بانتظار الاعتماد</h3>
+                <p className="text-xs text-slate-600">
+                  العملاء الجدد لا يمكنهم رؤية الأسعار الخاصة أو إرسال الطلبات إلا بعد موافقة الإدارة واعتماد حسابهم.
+                </p>
+              </div>
+            </div>
+            <div className="text-xs font-bold text-amber-800 bg-amber-100 px-3 py-1.5 rounded-xl self-start sm:self-auto">
+              {pendingCustomers.length} طلب بانتظار المراجعة
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <tr>
+                    <th className="p-3.5">اسم العميل / النشاط</th>
+                    <th className="p-3.5">رقم الهاتف والتواصل</th>
+                    <th className="p-3.5">المندوب المختار / المسند</th>
+                    <th className="p-3.5">تاريخ طلب التسجيل</th>
+                    <th className="p-3.5 text-center">إجراءات الاعتماد</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pendingCustomers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-16 text-slate-400">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />
+                        <p className="font-bold text-slate-700 text-sm">لا توجد طلبات معلقة حالياً</p>
+                        <p className="text-xs text-slate-400 mt-1">تمت مراجعة واعتماد جميع حسابات العملاء المسجلين.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    pendingCustomers.map((c) => {
+                      const rep = c.assigned_sales_rep_id
+                        ? salesAgents.find((s) => s.id === c.assigned_sales_rep_id) || { full_name: c.assigned_sales_rep_name || 'مندوب' }
+                        : null;
+
+                      return (
+                        <tr key={c.id} className="hover:bg-amber-50/20 transition">
+                          <td className="p-3.5">
+                            <div className="font-black text-slate-900 text-sm">{c.full_name}</div>
+                            {c.company_name ? (
+                              <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Building className="w-3 h-3 text-slate-400" />
+                                <span>{c.company_name}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">عميل تجزئة / محل</span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5">
+                            <div className="font-mono text-slate-800 font-bold flex items-center gap-1">
+                              <Phone className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{c.phone}</span>
+                            </div>
+                            <div className="mt-1">
+                              <a
+                                href={`https://wa.me/${c.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                                  `مرحباً ${c.full_name}، نرحب بك في متجر MH EL MAHDY، بخصوص طلب تسجيل حسابك التجاري.`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition"
+                              >
+                                <MessageCircle className="w-3 h-3 text-emerald-600" />
+                                <span>مراسلة واتساب</span>
+                              </a>
+                            </div>
+                          </td>
+
+                          <td className="p-3.5">
+                            <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <UserCheck className="w-3.5 h-3.5 text-[#0099DD]" />
+                              <span>{rep ? rep.full_name : 'توزيع تلقائي عادل'}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {c.assignment_type === 'customer_choice' ? 'اختيار العميل' : 'توزيع عادل'}
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 text-slate-500 font-mono text-[11px]">
+                            {c.created_at ? new Date(c.created_at).toLocaleString('ar-EG') : 'مؤخراً'}
+                          </td>
+
+                          <td className="p-3.5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                disabled={approvalActionLoadingId === c.id}
+                                onClick={async () => {
+                                  setApprovalActionLoadingId(c.id);
+                                  const res = await adminApproveCustomer(c.id);
+                                  setApprovalActionLoadingId(null);
+                                  setApprovalToast({ type: res.success ? 'success' : 'error', message: res.message || 'تم الاعتماد' });
+                                  setTimeout(() => setApprovalToast(null), 3500);
+                                }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              >
+                                {approvalActionLoadingId === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                <span>قبول واعتماد</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRejectingCustomer(c);
+                                  setRejectionReasonInput('');
+                                }}
+                                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl font-bold text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>رفض الطلب</span>
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })
@@ -1757,6 +1985,84 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
           </div>
         );
       })()}
+
+      {/* ── Customer Rejection Modal ── */}
+      {rejectingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-4 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-rose-600" />
+                <h4 className="font-extrabold text-sm text-rose-900">رفض طلب تسجيل العميل</h4>
+              </div>
+              <button
+                onClick={() => setRejectingCustomer(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                أنت على وشك رفض طلب العميل: <span className="font-bold text-slate-900">{rejectingCustomer.full_name}</span> ({rejectingCustomer.phone}).
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  سبب الرفض (اختياري، يظهر للعميل عند محاولة الدخول):
+                </label>
+                <textarea
+                  rows={3}
+                  value={rejectionReasonInput}
+                  onChange={(e) => setRejectionReasonInput(e.target.value)}
+                  placeholder="مثال: النشاط التجاري غير متطابق مع سياسة الجملة، أو رقم الهاتف غير مستجيب..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const custId = rejectingCustomer.id;
+                    setApprovalActionLoadingId(custId);
+                    const res = await adminRejectCustomer(custId, rejectionReasonInput);
+                    setApprovalActionLoadingId(null);
+                    setRejectingCustomer(null);
+                    setApprovalToast({ type: res.success ? 'success' : 'error', message: res.message || 'تم رفض الطلب' });
+                    setTimeout(() => setApprovalToast(null), 3500);
+                  }}
+                  disabled={approvalActionLoadingId === rejectingCustomer.id}
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {approvalActionLoadingId === rejectingCustomer.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                  <span>تأكيد الرفض</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRejectingCustomer(null)}
+                  className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Approval Feedback Toast ── */}
+      {approvalToast && (
+        <div className={`fixed bottom-6 left-6 z-50 px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-4 duration-200 ${
+          approvalToast.type === 'success'
+            ? 'bg-emerald-900 text-white border-emerald-700'
+            : 'bg-rose-900 text-white border-rose-700'
+        }`}>
+          {approvalToast.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
+          <span>{approvalToast.message}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -208,6 +208,8 @@ interface StoreContextType {
   adminUpdateCustomer: (id: string, updates: { full_name?: string; phone?: string; company_name?: string; sales_rep_id?: string; is_active?: boolean; notes?: string }) => Promise<{ success: boolean; message?: string }>;
   adminToggleCustomerActive: (id: string, isActive: boolean) => Promise<{ success: boolean; message?: string }>;
   adminDeleteCustomer: (id: string) => Promise<{ success: boolean; message?: string }>;
+  adminApproveCustomer: (id: string) => Promise<{ success: boolean; message?: string }>;
+  adminRejectCustomer: (id: string, reason?: string) => Promise<{ success: boolean; message?: string }>;
 
   // Custom Roles & Permissions Management (Admin)
   customRoles: CustomRole[];
@@ -669,6 +671,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (custList.length > 0) {
         setCustomers(custList);
         try { localStorage.setItem('mh_mahdy_customers', JSON.stringify(custList)); } catch {}
+
+        // Keep current customer session in sync with database status (e.g. approval_status)
+        const savedUserStr = typeof window !== 'undefined' ? localStorage.getItem('mh_mahdy_user') : null;
+        const currentUserId = savedUserStr ? JSON.parse(savedUserStr)?.id : null;
+        if (currentUserId) {
+          const freshSelf = custList.find((c) => c.id === currentUserId);
+          if (freshSelf) {
+            setCurrentUser(freshSelf);
+            try { localStorage.setItem('mh_mahdy_user', JSON.stringify(freshSelf)); } catch {}
+          }
+        }
       }
 
       // Staff Members List (Admin, Sales, Warehouse, or any custom role staff)
@@ -871,26 +884,51 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     refreshData();
 
     if (isSupabaseConfigured()) {
+      // ── Debounced refresh to avoid cascade re-fetches when many rows change at once ──
+      let catalogDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+      const debouncedRefresh = () => {
+        if (catalogDebounceTimer) clearTimeout(catalogDebounceTimer);
+        catalogDebounceTimer = setTimeout(() => {
+          refreshData();
+        }, 1200); // 1.2s debounce — batches rapid successive changes
+      };
+
       const ordersChannel = supabase
         .channel('live-orders')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
           if (payload.eventType === 'INSERT') {
             playOrderChime();
           }
-          refreshData();
+          refreshData(); // orders need instant update — no debounce
         })
         .subscribe();
 
       const shortagesChannel = supabase
         .channel('live-shortages')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'shortage_requests' }, () => {
-          refreshData();
+          refreshData(); // shortages also instant
         })
         .subscribe();
 
+      // ── Extended catalog & staff channels (debounced) ──────────────────────────
+      const catalogChannel = supabase
+        .channel('live-catalog')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, debouncedRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, debouncedRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'product_model_matrix' }, debouncedRefresh)
+        .subscribe();
+
+      const profilesChannel = supabase
+        .channel('live-profiles')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, debouncedRefresh)
+        .subscribe();
+
       return () => {
+        if (catalogDebounceTimer) clearTimeout(catalogDebounceTimer);
         supabase.removeChannel(ordersChannel);
         supabase.removeChannel(shortagesChannel);
+        supabase.removeChannel(catalogChannel);
+        supabase.removeChannel(profilesChannel);
       };
     }
   }, [refreshData]);
@@ -1872,6 +1910,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             phone: u.phone,
             company_name: u.company_name,
             role: 'customer',
+            approval_status: (u.approval_status as 'pending' | 'approved' | 'rejected') || 'approved',
+            rejection_reason: u.rejection_reason || undefined,
             // First-Touch Stickiness: rep is null until a sales agent first processes this customer's order
             assigned_sales_rep_id: u.assigned_sales_rep_id || undefined,
             assigned_sales_rep_name: u.assigned_sales_rep_name || undefined,
@@ -1916,6 +1956,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           phone: existing.phone,
           company_name: existing.company_name,
           role: 'customer',
+          approval_status: (existing.approval_status as 'pending' | 'approved' | 'rejected') || 'approved',
+          rejection_reason: existing.rejection_reason || undefined,
           assigned_sales_rep_id: existing.assigned_sales_rep_id || undefined,
           assigned_sales_rep_name: existing.assigned_sales_rep?.full_name,
           assigned_sales_rep_phone: existing.assigned_sales_rep?.phone,
@@ -1988,6 +2030,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             phone: u.phone,
             company_name: u.company_name,
             role: 'customer',
+            approval_status: (u.approval_status as 'pending' | 'approved' | 'rejected') || 'pending',
+            rejection_reason: u.rejection_reason || undefined,
             assigned_sales_rep_id: u.assigned_sales_rep_id || targetRep?.id || undefined,
             assigned_sales_rep_name: u.assigned_sales_rep_name || targetRep?.full_name || undefined,
             assigned_sales_rep_phone: u.assigned_sales_rep_phone || targetRep?.phone || undefined,
@@ -2042,6 +2086,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             phone: cleanPhone,
             company_name: cleanCompany,
             role: 'customer',
+            approval_status: 'pending',
             assigned_sales_rep_id: targetRep?.id || null,
           }, { onConflict: 'phone' })
           .select()
@@ -2081,6 +2126,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           phone: cleanPhone,
           company_name: cleanCompany,
           role: 'customer',
+          approval_status: 'pending',
           assigned_sales_rep_id: targetRep?.id,
           assigned_sales_rep_name: targetRep?.full_name,
           assigned_sales_rep_phone: targetRep?.phone,
@@ -2230,7 +2276,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // Place Order (Starts strictly as 'pending', inventory is NOT held yet)
   const placePendingOrder = async (shippingAddress: string, notes?: string): Promise<Order | null> => {
-    if (!currentUser || cart.length === 0) return null;
+    if (!currentUser || currentUser.approval_status !== 'approved' || cart.length === 0) return null;
 
     const orderId = generateUUID();
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -2875,6 +2921,79 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: 'تم حذف العميل وسجلاته بنجاح' };
   };
 
+  // Admin: Approve Customer
+  const adminApproveCustomer = async (id: string): Promise<{ success: boolean; message?: string }> => {
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, approval_status: 'approved', rejection_reason: undefined } : c))
+    );
+    if (currentUser?.id === id) {
+      const updatedUser: UserProfile = { ...currentUser, approval_status: 'approved', rejection_reason: undefined };
+      setCurrentUser(updatedUser);
+      try { localStorage.setItem('mh_mahdy_user', JSON.stringify(updatedUser)); } catch {}
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+      localStorage.setItem(
+        'mh_mahdy_customers',
+        JSON.stringify(stored.map((c: any) => (c.id === id ? { ...c, approval_status: 'approved', rejection_reason: undefined } : c)))
+      );
+    } catch {}
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('sp_admin_approve_customer', {
+          p_customer_id: id,
+        });
+        if (rpcErr || (rpcRes && !rpcRes.success)) {
+          await supabase.from('user_profiles').update({ approval_status: 'approved', rejection_reason: null }).eq('id', id);
+        }
+      } catch (err) {
+        console.warn('adminApproveCustomer error:', err);
+        await supabase.from('user_profiles').update({ approval_status: 'approved', rejection_reason: null }).eq('id', id);
+      }
+      await refreshData();
+    }
+
+    return { success: true, message: 'تم اعتماد وتفعيل حساب العميل بنجاح' };
+  };
+
+  // Admin: Reject Customer
+  const adminRejectCustomer = async (id: string, reason?: string): Promise<{ success: boolean; message?: string }> => {
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, approval_status: 'rejected', rejection_reason: reason } : c))
+    );
+    if (currentUser?.id === id) {
+      const updatedUser: UserProfile = { ...currentUser, approval_status: 'rejected', rejection_reason: reason };
+      setCurrentUser(updatedUser);
+      try { localStorage.setItem('mh_mahdy_user', JSON.stringify(updatedUser)); } catch {}
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem('mh_mahdy_customers') || '[]');
+      localStorage.setItem(
+        'mh_mahdy_customers',
+        JSON.stringify(stored.map((c: any) => (c.id === id ? { ...c, approval_status: 'rejected', rejection_reason: reason } : c)))
+      );
+    } catch {}
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('sp_admin_reject_customer', {
+          p_customer_id: id,
+          p_reason: reason || null,
+        });
+        if (rpcErr || (rpcRes && !rpcRes.success)) {
+          await supabase.from('user_profiles').update({ approval_status: 'rejected', rejection_reason: reason || null }).eq('id', id);
+        }
+      } catch (err) {
+        console.warn('adminRejectCustomer error:', err);
+        await supabase.from('user_profiles').update({ approval_status: 'rejected', rejection_reason: reason || null }).eq('id', id);
+      }
+      await refreshData();
+    }
+
+    return { success: true, message: 'تم رفض طلب حساب العميل' };
+  };
+
   // Automatic Least-Loaded Sales Rep (Equal Opportunities Distribution)
   const getLeastLoadedSalesRep = useCallback((): UserProfile | null => {
     const eligibleReps = staffMembers.filter((s) => {
@@ -3211,6 +3330,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         adminUpdateCustomer,
         adminToggleCustomerActive,
         adminDeleteCustomer,
+        adminApproveCustomer,
+        adminRejectCustomer,
 
         customRoles,
         addCustomRole,

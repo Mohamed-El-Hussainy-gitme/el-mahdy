@@ -139,6 +139,10 @@ export interface UserProfile {
   address?: string;
   role: UserRole;
   is_active?: boolean;
+  /** For customers only: approval flow status */
+  approval_status?: 'pending' | 'approved' | 'rejected';
+  /** Optional admin note on rejection */
+  rejection_reason?: string;
   assigned_sales_rep_id?: string;
   assigned_sales_rep_name?: string;
   assigned_sales_rep_phone?: string;

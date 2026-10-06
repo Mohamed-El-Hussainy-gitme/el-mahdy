@@ -15,7 +15,7 @@ import MobileBottomNav from '@/components/MobileBottomNav';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 import Footer from '@/components/Footer';
 import { useStore } from '@/context/StoreContext';
-import { Sparkles, ArrowUpDown, PackageSearch, ShieldCheck, Truck, Phone } from 'lucide-react';
+import { Sparkles, ArrowUpDown, PackageSearch, ShieldCheck, Truck, Phone, Clock } from 'lucide-react';
 
 export default function StorefrontPage() {
   const {
@@ -26,6 +26,8 @@ export default function StorefrontPage() {
     selectedBrand,
     priceRange,
     onlyFeatured,
+    currentUser,
+    openAccountModalWithTab,
   } = useStore();
 
   const [sortBy, setSortBy] = React.useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
@@ -111,6 +113,29 @@ export default function StorefrontPage() {
       {/* 2. Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
         
+        {/* Pending Approval Notice Banner */}
+        {currentUser && currentUser.approval_status === 'pending' && (
+          <div className="mb-6 p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-sm animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-amber-950">حسابك التجاري قيد المراجعة والاعتماد</h4>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  تصفح الكتالوج متاح لك بالكامل حالياً. ستظهر الأسعار الخاصة وإمكانية الطلب فور اعتماد حسابك من قبل الإدارة.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => openAccountModalWithTab('menu')}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition shadow-xs self-start sm:self-auto cursor-pointer"
+            >
+              عرض حالة الحساب
+            </button>
+          </div>
+        )}
+
         {/* Catalog Showcases (Matching yasbas carousel and tiles) */}
         <CatalogSection />
 

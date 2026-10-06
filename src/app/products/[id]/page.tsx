@@ -19,10 +19,14 @@ import { ProductModelMatrixItem } from '@/types';
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { products, categories, addToCart, wishlist, toggleWishlist, isLoading } = useStore();
+  const { products, categories, addToCart, wishlist, toggleWishlist, isLoading, currentUser, openAccountModalWithTab } = useStore();
   
   const product = products.find(p => p.id === id);
   const isWishlisted = product ? wishlist.includes(product.id) : false;
+
+  const isApproved = !!currentUser && (currentUser.approval_status === 'approved' || !currentUser.approval_status);
+  const isPending = !!currentUser && currentUser.approval_status === 'pending';
+  const isRejected = !!currentUser && currentUser.approval_status === 'rejected';
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const mainImage = selectedImage || product?.image_url || '/placeholder.svg';
@@ -199,10 +203,33 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               SKU: {product.sku}
             </div>
 
-            <div className="flex items-baseline gap-2 mb-6">
-              <span className="text-4xl font-black text-slate-900">{product.price.toFixed(2)}</span>
-              <span className="text-lg font-bold text-slate-500">ج.م</span>
-            </div>
+            {/* Price display - hidden from unapproved visitors */}
+            {isApproved ? (
+              <div className="flex items-baseline gap-2 mb-6">
+                <span className="text-4xl font-black text-slate-900">{product.price.toFixed(2)}</span>
+                <span className="text-lg font-bold text-slate-500">ج.م</span>
+              </div>
+            ) : isPending ? (
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-xs font-bold flex items-center gap-2.5 shadow-sm">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                <span>حسابك قيد المراجعة والاعتماد من الإدارة — سيتم تفعيل الأسعار والطلب فور الاعتماد.</span>
+              </div>
+            ) : isRejected ? (
+              <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs font-bold flex items-center gap-2.5 shadow-sm">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                <span>لم تتم الموافقة على حسابك. {currentUser?.rejection_reason ? `سبب الرفض: ${currentUser.rejection_reason}` : ''}</span>
+              </div>
+            ) : (
+              <div className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => openAccountModalWithTab('register')}
+                  className="inline-flex items-center gap-2 bg-[#0099DD] hover:bg-[#007BB3] text-white px-5 py-3 rounded-2xl font-black text-xs shadow-md shadow-sky-500/20 transition active:scale-95"
+                >
+                  <span>سجّل حسابك لعرض السعر والطلب</span>
+                </button>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-3 mb-6">
               <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-100">
@@ -216,14 +243,15 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            {product.description_ar && (
+            {/* Description — visible only to approved users */}
+            {isApproved && product.description_ar && (
               <div className="text-sm text-slate-600 leading-relaxed mb-8 border-t border-slate-100 pt-4">
                 {product.description_ar}
               </div>
             )}
 
-            {/* Non-matrix direct add to cart */}
-            {!product.has_compatibility_matrix && (
+            {/* Non-matrix direct add to cart — only for approved users */}
+            {isApproved && !product.has_compatibility_matrix && (
               <div className="mt-auto bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center bg-white border border-slate-200 rounded-lg h-12">
@@ -238,11 +266,48 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               </div>
             )}
+
+            {/* Locked CTA for non-approved users */}
+            {!isApproved && (
+              <div className="mt-auto bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 rounded-2xl border border-slate-700 shadow-sm space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-[#0099DD] shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-xs text-white">تفاصيل المنتج والطلب مقصورة على العملاء المعتمدين</h4>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">الأسعار، الوصف الفني، وجدول الموديلات والتوافق متاحة حصرياً لتجار ومحلات B2B بعد اعتماد الحساب.</p>
+                  </div>
+                </div>
+                {!currentUser ? (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => openAccountModalWithTab('register')}
+                      className="bg-[#0099DD] hover:bg-[#007BB3] text-white px-4 py-2 rounded-xl text-xs font-bold shadow transition"
+                    >
+                      إنشاء حساب تاجر
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAccountModalWithTab('login')}
+                      className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition"
+                    >
+                      تسجيل الدخول
+                    </button>
+                  </div>
+                ) : isPending ? (
+                  <div className="p-2.5 bg-amber-500/20 border border-amber-400/30 rounded-xl text-amber-200 text-xs font-bold">
+                    ⏳ طلبك قيد المراجعة الإدارية. يمكنك تصفح المنتجات في الأثناء.
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Matrix Section */}
-        {product.has_compatibility_matrix && (
+        {/* Matrix Section — only visible to approved users */}
+        {isApproved && product.has_compatibility_matrix && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
             <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <h2 className="text-lg font-black text-slate-900">اختيار الموديل والكمية</h2>

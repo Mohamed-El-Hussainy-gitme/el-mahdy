@@ -18,6 +18,7 @@ import {
   Loader2,
   RefreshCw,
   Heart,
+  Clock,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
 
@@ -215,20 +216,64 @@ export default function UserAccountModal() {
           {accountModalTab === 'menu' && (
             <div className="space-y-4 text-sm">
               {currentUser ? (
-                <div className="bg-sky-50/80 border border-sky-200 rounded-xl p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <UserCheck className="w-4 h-4 text-[#0099DD]" />
-                      {currentUser.full_name}
-                    </span>
-                    <button
-                      onClick={logout}
-                      className="text-xs text-red-600 hover:text-red-700 flex items-center gap-1 font-semibold"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      خروج
-                    </button>
-                  </div>
+                <>
+                  {/* Approval Status Banner */}
+                  {currentUser.approval_status === 'pending' ? (
+                    <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-center space-y-2.5 shadow-sm">
+                      <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                        <Clock className="w-6 h-6 animate-pulse" />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="inline-block bg-amber-500 text-white text-[10px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider">
+                          قيد المراجعة الإدارية
+                        </span>
+                        <h4 className="font-black text-slate-900 text-sm">حسابك قيد التدقيق والاعتماد</h4>
+                        <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                          تم استلام طلب التسجيل بنجاح. نقوم حالياً بمراجعة البيانات واعتماد الحساب لتتمكن من رؤية الأسعار الخاصة وإرسال الطلبات مباشرة.
+                        </p>
+                      </div>
+                      <div className="text-[11px] text-amber-800 font-bold bg-amber-100/70 py-1.5 px-3 rounded-xl inline-block">
+                        تصفح الكتالوج والأصناف متاح لك بالكامل حالياً
+                      </div>
+                    </div>
+                  ) : currentUser.approval_status === 'rejected' ? (
+                    <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 text-center space-y-2 shadow-sm">
+                      <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      <span className="inline-block bg-rose-500 text-white text-[10px] font-black px-3 py-0.5 rounded-full">
+                        لم يتم اعتماد الحساب
+                      </span>
+                      {currentUser.rejection_reason && (
+                        <p className="text-xs text-rose-700 font-medium">السبب: {currentUser.rejection_reason}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span className="font-bold text-emerald-800">حساب تجاري معتمد (B2B)</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                        الأسعار والطلب مفعلان
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="bg-sky-50/80 border border-sky-200 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4 text-[#0099DD]" />
+                        {currentUser.full_name}
+                      </span>
+                      <button
+                        onClick={logout}
+                        className="text-xs text-red-600 hover:text-red-700 flex items-center gap-1 font-semibold"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        خروج
+                      </button>
+                    </div>
                   <div className="text-xs text-slate-600 space-y-1">
                     <p className="flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-slate-400" />
@@ -372,6 +417,7 @@ export default function UserAccountModal() {
                     )}
                   </div>
                 </div>
+              </>
               ) : (
                 /* Two separate CTAs for guest */
                 <div className="grid grid-cols-2 gap-2">
