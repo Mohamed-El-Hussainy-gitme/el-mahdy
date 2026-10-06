@@ -84,8 +84,8 @@ interface CategoryTreeManagerProps {
   products?: Product[];
   currentRole: UserRole;
   staffProfile?: UserProfile | null;
-  onAddCategory: (category: Omit<Category, 'id' | 'created_at' | 'updated_at'>) => void | Promise<void>;
-  onUpdateCategory: (id: string, updates: Partial<Category>) => void | Promise<void>;
+  onAddCategory: (category: Omit<Category, 'id' | 'created_at' | 'updated_at'>) => any;
+  onUpdateCategory: (id: string, updates: Partial<Category>) => any;
   onDeleteCategory: (id: string) => { success: boolean; message?: string } | Promise<{ success: boolean; message?: string }>;
 }
 
@@ -108,6 +108,7 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
   const [imageUrl, setImageUrl] = useState('');
   const [sortOrder, setSortOrder] = useState<number>(1);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -159,33 +160,50 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
     onUpdateCategory(cat.id, { sort_order: newOrder });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nameAr.trim()) return;
+    if (!nameAr.trim() || isSubmitting) return;
 
     const finalSlug = slug.trim() || nameAr.trim().toLowerCase().replace(/\s+/g, '-');
+    setIsSubmitting(true);
 
-    if (editingCategory) {
-      onUpdateCategory(editingCategory.id, {
-        name_ar: nameAr.trim(),
-        slug: finalSlug,
-        parent_id: parentId,
-        icon: icon,
-        image_url: imageUrl.trim() ? imageUrl.trim() : null,
-        sort_order: Number(sortOrder) || 1,
-      });
-    } else {
-      onAddCategory({
-        name_ar: nameAr.trim(),
-        slug: finalSlug,
-        parent_id: parentId,
-        icon: icon,
-        image_url: imageUrl.trim() ? imageUrl.trim() : undefined,
-        sort_order: Number(sortOrder) || categories.length + 1,
-        is_active: true,
-      });
+    try {
+      if (editingCategory) {
+        const res = await onUpdateCategory(editingCategory.id, {
+          name_ar: nameAr.trim(),
+          slug: finalSlug,
+          parent_id: parentId,
+          icon: icon,
+          image_url: imageUrl.trim() ? imageUrl.trim() : null,
+          sort_order: Number(sortOrder) || 1,
+        });
+        if (res && typeof res === 'object' && 'success' in res && !res.success) {
+          alert(res.message || 'فشل تحديث التصنيف');
+          setIsSubmitting(false);
+          return;
+        }
+      } else {
+        const res = await onAddCategory({
+          name_ar: nameAr.trim(),
+          slug: finalSlug,
+          parent_id: parentId,
+          icon: icon,
+          image_url: imageUrl.trim() ? imageUrl.trim() : undefined,
+          sort_order: Number(sortOrder) || categories.length + 1,
+          is_active: true,
+        });
+        if (res && typeof res === 'object' && 'success' in res && !res.success) {
+          alert(res.message || 'فشل إضافة التصنيف');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+      setIsModalOpen(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'حدث خطأ أثناء حفظ التصنيف');
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsModalOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -528,10 +546,20 @@ export const CategoryTreeManager: React.FC<CategoryTreeManagerProps> = ({
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 bg-[#0099DD] hover:bg-[#007BB3] text-white px-5 py-2 rounded-xl font-bold shadow-sm transition text-xs"
+                disabled={isSubmitting}
+                className="flex items-center gap-1.5 bg-[#0099DD] hover:bg-[#007BB3] disabled:opacity-50 text-white px-5 py-2 rounded-xl font-bold shadow-sm transition text-xs"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>حفظ التصنيف</span>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>جاري الحفظ...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>حفظ التصنيف</span>
+                  </>
+                )}
               </button>
             </div>
           </form>

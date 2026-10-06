@@ -108,8 +108,8 @@ interface StoreContextType {
   // Categories & CRUD
   categories: Category[];
   categoriesTree: Category[];
-  addCategory: (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string | null }) => Promise<void>;
-  updateCategory: (id: string, cat: Partial<Category>) => Promise<void>;
+  addCategory: (cat: { name_ar: string; slug: string; parent_id?: string | null; icon?: string; image_url?: string | null }) => Promise<{ success: boolean; message?: string }>;
+  updateCategory: (id: string, cat: Partial<Category>) => Promise<{ success: boolean; message?: string }>;
   deleteCategory: (id: string) => Promise<{ success: boolean; message?: string }>;
   selectedCategorySlug: string;
   setSelectedCategorySlug: (slug: string) => void;
@@ -1001,57 +1001,52 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       name_ar: cat.name_ar,
       slug: cat.slug || 'cat-' + Date.now(),
       parent_id: cat.parent_id || null,
-      icon: cat.icon || '',
+      icon: cat.icon || 'Folder',
       image_url: cat.image_url || '',
       sort_order: categories.length + 1,
       is_active: true,
       product_count: 0,
     };
 
-    setCategories((prev) => [...prev, newCat]);
+    invalidateCatalogCache();
 
     if (isSupabaseConfigured()) {
       try {
         const token = await getAuthToken();
-        if (token) {
-          const res = await fetch('/api/admin/categories', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(newCat),
-          });
-          const resData = await res.json();
-          if (!res.ok || !resData.success) {
-            console.warn('API addCategory fallback to direct supabase:', resData.error);
-            await supabase.from('categories').insert({
-              id: newCat.id,
-              name_ar: newCat.name_ar,
-              slug: newCat.slug,
-              parent_id: newCat.parent_id,
-              icon: newCat.icon,
-              image_url: newCat.image_url || null,
-              sort_order: newCat.sort_order,
-              is_active: newCat.is_active,
-            });
-          }
-        } else {
-          await supabase.from('categories').insert({
-            id: newCat.id,
-            name_ar: newCat.name_ar,
-            slug: newCat.slug,
-            parent_id: newCat.parent_id,
-            icon: newCat.icon,
-            image_url: newCat.image_url || null,
-            sort_order: newCat.sort_order,
-            is_active: newCat.is_active,
-          });
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
+        const res = await fetch('/api/admin/categories', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(newCat),
+        });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          return { success: false, message: resData.error || 'فشل حفظ التصنيف في الخادم' };
         }
-      } catch (err) {
-        console.warn('Supabase addCategory sync error:', err);
+        if (resData.category) {
+          const savedCat: Category = { ...newCat, ...resData.category };
+          setCategories((prev) => {
+            const next = [...prev.filter((c) => c.id !== savedCat.id), savedCat];
+            try { localStorage.setItem('mh_mahdy_categories', JSON.stringify(next)); } catch {}
+            return next;
+          });
+          return { success: true };
+        }
+      } catch (err: unknown) {
+        console.warn('addCategory error:', err);
+        return { success: false, message: err instanceof Error ? err.message : 'حدث خطأ أثناء حفظ التصنيف' };
       }
     }
+
+    setCategories((prev) => {
+      const next = [...prev, newCat];
+      try { localStorage.setItem('mh_mahdy_categories', JSON.stringify(next)); } catch {}
+      return next;
+    });
+    return { success: true };
   };
 
   const getAuthToken = async () => {
@@ -1060,69 +1055,56 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return session?.access_token || null;
   };
 
-  const updateCategory = async (id: string, updated: Partial<Category>) => {
-    // ── Invalidate cache FIRST so any subsequent refreshData() re-fetches from DB ──
+  const updateCategory = async (id: string, updated: Partial<Category>): Promise<{ success: boolean; message?: string }> => {
     invalidateCatalogCache();
-
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? {
-        ...c,
-        ...updated,
-        image_url: updated.image_url !== undefined ? (updated.image_url || undefined) : c.image_url,
-      } : c))
-    );
 
     if (isSupabaseConfigured()) {
       try {
         const token = await getAuthToken();
-        if (token) {
-          const res = await fetch('/api/admin/categories', {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ id, ...updated }),
-          });
-          const resData = await res.json();
-          if (!res.ok || !resData.success) {
-            console.warn('API updateCategory fallback to direct supabase:', resData.error);
-            await supabase
-              .from('categories')
-              .update({
-                ...(updated.name_ar && { name_ar: updated.name_ar }),
-                ...(updated.slug && { slug: updated.slug }),
-                ...(updated.parent_id !== undefined && { parent_id: updated.parent_id }),
-                ...(updated.icon !== undefined && { icon: updated.icon }),
-                ...(updated.image_url !== undefined && { image_url: updated.image_url || null }),
-                ...(updated.sort_order !== undefined && { sort_order: updated.sort_order }),
-                ...(updated.is_active !== undefined && { is_active: updated.is_active }),
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', id);
-          }
-        } else {
-          await supabase
-            .from('categories')
-            .update({
-              ...(updated.name_ar && { name_ar: updated.name_ar }),
-              ...(updated.slug && { slug: updated.slug }),
-              ...(updated.parent_id !== undefined && { parent_id: updated.parent_id }),
-              ...(updated.icon !== undefined && { icon: updated.icon }),
-              ...(updated.image_url !== undefined && { image_url: updated.image_url || null }),
-              ...(updated.sort_order !== undefined && { sort_order: updated.sort_order }),
-              ...(updated.is_active !== undefined && { is_active: updated.is_active }),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', id);
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
+        const res = await fetch('/api/admin/categories', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ id, ...updated }),
+        });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          return { success: false, message: resData.error || 'فشل تحديث التصنيف في الخادم' };
         }
-      } catch (err) {
-        console.warn('Supabase updateCategory sync error:', err);
+
+        const returnedCat = resData.category;
+        setCategories((prev) => {
+          const next = prev.map((c) => (c.id === id ? {
+            ...c,
+            ...updated,
+            ...(returnedCat || {}),
+            image_url: updated.image_url !== undefined ? (updated.image_url || undefined) : (returnedCat?.image_url ?? c.image_url),
+          } : c));
+          try { localStorage.setItem('mh_mahdy_categories', JSON.stringify(next)); } catch {}
+          return next;
+        });
+
+        return { success: true };
+      } catch (err: unknown) {
+        console.warn('updateCategory error:', err);
+        return { success: false, message: err instanceof Error ? err.message : 'حدث خطأ أثناء تحديث التصنيف' };
       }
     }
+
+    setCategories((prev) => {
+      const next = prev.map((c) => (c.id === id ? {
+        ...c,
+        ...updated,
+        image_url: updated.image_url !== undefined ? (updated.image_url || undefined) : c.image_url,
+      } : c));
+      try { localStorage.setItem('mh_mahdy_categories', JSON.stringify(next)); } catch {}
+      return next;
+    });
+    return { success: true };
   };
-
-
 
   const deleteCategory = async (id: string): Promise<{ success: boolean; message?: string }> => {
     const validation = validateCategoryDeletion(categories, id, products);
@@ -1130,36 +1112,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return { success: false, message: validation.reason };
     }
 
-    const previousCategories = categories;
-    setCategories((prev) => prev.filter((c) => c.id !== id));
+    invalidateCatalogCache();
 
     if (isSupabaseConfigured()) {
       try {
         const token = await getAuthToken();
-        if (token) {
-          const res = await fetch(`/api/admin/categories?id=${id}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const resData = await res.json();
-          if (!res.ok || !resData.success) {
-            setCategories(previousCategories);
-            return { success: false, message: resData.error || 'فشل حذف التصنيف من الخادم' };
-          }
-        } else {
-          await supabase.from('product_categories').delete().eq('category_id', id);
-          await supabase.from('categories').update({ parent_id: null }).eq('parent_id', id);
-          const { error } = await supabase.from('categories').delete().eq('id', id);
-          if (error) {
-            setCategories(previousCategories);
-            return { success: false, message: error.message };
-          }
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
+        const res = await fetch(`/api/admin/categories?id=${id}`, {
+          method: 'DELETE',
+          headers,
+        });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          return { success: false, message: resData.error || 'فشل حذف التصنيف من الخادم' };
         }
       } catch (err: unknown) {
-        setCategories(previousCategories);
         return { success: false, message: err instanceof Error ? err.message : 'حدث خطأ أثناء حذف التصنيف' };
       }
     }
+
+    setCategories((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      try { localStorage.setItem('mh_mahdy_categories', JSON.stringify(next)); } catch {}
+      return next;
+    });
 
     return { success: true };
   };
