@@ -1061,6 +1061,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateCategory = async (id: string, updated: Partial<Category>) => {
+    // ── Invalidate cache FIRST so any subsequent refreshData() re-fetches from DB ──
+    invalidateCatalogCache();
+
     setCategories((prev) =>
       prev.map((c) => (c.id === id ? {
         ...c,
@@ -1118,6 +1121,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
     }
   };
+
 
 
   const deleteCategory = async (id: string): Promise<{ success: boolean; message?: string }> => {
