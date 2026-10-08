@@ -19,9 +19,10 @@ import { useStore } from '@/context/StoreContext';
 
 interface ProductCardProps {
   product: Product;
+  priority?: boolean;
 }
 
-function ProductCard({ product }: ProductCardProps) {
+function ProductCard({ product, priority = false }: ProductCardProps) {
   const {
     openCompatibilityModal,
     addToCart,
@@ -117,8 +118,9 @@ function ProductCard({ product }: ProductCardProps) {
             src={product.image_url || '/placeholder.svg'}
             alt={product.title_ar}
             fill
+            priority={priority}
             className="object-cover group-hover:scale-105 transition-transform duration-300"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           />
         </Link>
 

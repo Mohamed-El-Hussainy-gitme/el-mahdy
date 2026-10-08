@@ -15,13 +15,17 @@ const nextConfig = {
   },
 
   images: {
-    // unoptimized was removed — Next.js now auto-converts to WebP, resizes, and lazy-loads
+    // Next.js with sharp: converts to AVIF/WebP, caches for 1 year, and restricts unnecessary breakpoint sizes
     remotePatterns: [
       {
         protocol: 'https',
         hostname: '**',
       },
     ],
+    minimumCacheTTL: 31536000,
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
   },
 
   /**

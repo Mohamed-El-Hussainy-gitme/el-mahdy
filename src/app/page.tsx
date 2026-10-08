@@ -17,6 +17,8 @@ import Footer from '@/components/Footer';
 import { useStore } from '@/context/StoreContext';
 import { Sparkles, ArrowUpDown, PackageSearch, ShieldCheck, Truck, Phone, Clock } from 'lucide-react';
 
+const ITEMS_PER_PAGE = 24;
+
 export default function StorefrontPage() {
   const {
     products,
@@ -31,6 +33,12 @@ export default function StorefrontPage() {
   } = useStore();
 
   const [sortBy, setSortBy] = React.useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
+  const [visibleCount, setVisibleCount] = React.useState(ITEMS_PER_PAGE);
+
+  // Reset pagination when any filter changes
+  React.useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE);
+  }, [selectedCategorySlug, searchQuery, selectedBrand, priceRange, onlyFeatured, sortBy]);
 
   // Active Category Object
   const currentCategory = useMemo(() => {
@@ -101,6 +109,12 @@ export default function StorefrontPage() {
     onlyFeatured,
     sortBy,
   ]);
+
+  const visibleProducts = useMemo(() => {
+    return filteredProducts.slice(0, visibleCount);
+  }, [filteredProducts, visibleCount]);
+
+  const hasMore = visibleCount < filteredProducts.length;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFC] pb-16 md:pb-0">
@@ -185,10 +199,27 @@ export default function StorefrontPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {visibleProducts.map((product, idx) => (
+                    <ProductCard key={product.id} product={product} priority={idx < 4} />
+                  ))}
+                </div>
+
+                {hasMore && (
+                  <div className="flex flex-col items-center justify-center pt-4 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount((prev) => prev + ITEMS_PER_PAGE)}
+                      className="px-6 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0099DD] text-slate-800 hover:text-[#0099DD] font-bold text-xs rounded-xl shadow-xs transition duration-150 flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>عرض المزيد من المنتجات</span>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-mono font-bold">
+                        {visibleProducts.length} من {filteredProducts.length}
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

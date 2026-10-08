@@ -202,8 +202,8 @@ export default function FavoritesPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {wishlistedProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {wishlistedProducts.map((product, idx) => (
+              <ProductCard key={product.id} product={product} priority={idx < 4} />
             ))}
           </div>
         )}

@@ -236,6 +236,7 @@ function CatalogSection() {
                       src={banner.image}
                       alt={banner.title}
                       fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                       className="object-cover group-hover:scale-105 transition duration-500"
                     />
                   ) : (
@@ -302,6 +303,7 @@ function CatalogSection() {
                     src={item.image_url || '/placeholder.svg'}
                     alt={item.title_ar}
                     fill
+                    sizes="176px"
                     className="object-cover group-hover:scale-105 transition duration-200"
                   />
                 </Link>

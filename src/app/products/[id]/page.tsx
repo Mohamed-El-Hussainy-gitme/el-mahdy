@@ -186,7 +186,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
                 {allImages.map((img, idx) => (
                   <button key={idx} onClick={() => setSelectedImage(img)} className={`relative w-16 h-16 rounded-xl border-2 overflow-hidden shrink-0 transition ${mainImage === img ? 'border-[#0099DD] shadow-sm' : 'border-slate-200 hover:border-[#0099DD]/50'}`}>
-                    <Image src={img} alt="" fill className="object-cover" sizes="64px" />
+                    <Image src={img} alt="" fill className="object-cover" sizes="64px" loading="lazy" />
                   </button>
                 ))}
                 <span className="text-xs font-bold text-slate-400 mr-2">{allImages.length} صور</span>
