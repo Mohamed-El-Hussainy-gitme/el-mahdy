@@ -22,32 +22,58 @@ function getSupabaseAdmin() {
 async function verifyAdminCaller(request: NextRequest, supabaseAdmin: any) {
   const authHeader = request.headers.get('authorization');
   const token = authHeader?.replace(/^Bearer\s+/i, '');
+  const staffId = request.headers.get('x-staff-id');
 
-  if (!token) {
-    return { error: 'غير مصرح: يجب تسجيل الدخول بحساب مدير النظام (Admin)', status: 401 };
+  // Case 1: Bearer token provided
+  if (token) {
+    const { data: { user: callerUser }, error: callerAuthError } = await supabaseAdmin.auth.getUser(token);
+    if (!callerAuthError && callerUser) {
+      let { data: callerProfile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id, role, full_name, email')
+        .eq('auth_user_id', callerUser.id)
+        .maybeSingle();
+
+      // Email fallback: link auth_user_id if not yet linked
+      if (!callerProfile && callerUser.email) {
+        const { data: byEmail } = await supabaseAdmin
+          .from('user_profiles')
+          .select('id, role, full_name, email')
+          .eq('email', callerUser.email)
+          .maybeSingle();
+        if (byEmail) {
+          callerProfile = byEmail;
+          await supabaseAdmin
+            .from('user_profiles')
+            .update({ auth_user_id: callerUser.id })
+            .eq('id', byEmail.id);
+        }
+      }
+
+      if (callerProfile && callerProfile.role === 'admin') {
+        return { callerProfile, callerUser };
+      }
+    }
   }
 
-  const { data: { user: callerUser }, error: callerAuthError } = await supabaseAdmin.auth.getUser(token);
+  // Case 2: x-staff-id header fallback (for admin staff sessions)
+  if (staffId) {
+    const { data: staffProfile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id, role, full_name, email')
+      .eq('id', staffId)
+      .eq('is_active', true)
+      .maybeSingle();
 
-  if (callerAuthError || !callerUser) {
-    return { error: 'جلسة تسجيل الدخول غير صالحة أو منتهية', status: 401 };
+    if (staffProfile && staffProfile.role === 'admin') {
+      return { callerProfile: staffProfile, callerUser: null };
+    }
   }
 
-  // Check role in user_profiles
-  const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
-    .from('user_profiles')
-    .select('id, role, full_name')
-    .eq('auth_user_id', callerUser.id)
-    .maybeSingle();
-
-  if (callerProfileError || !callerProfile || callerProfile.role !== 'admin') {
-    return {
-      error: 'صلاحية مرفوضة: هذه العملية مقصورة حصراً على مدير النظام (Admin)',
-      status: 403,
-    };
-  }
-
-  return { callerProfile, callerUser };
+  return {
+    error: 'صلاحية مرفوضة: هذه العملية مقصورة حصراً على مدير النظام (Admin)',
+    status: 403,
+  };
 }
 
 // =============================================================================
@@ -264,7 +290,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, fullName, phone, role, password, customRoleId } = body;
+    const { id, fullName, phone, role, password, customRoleId, isActive } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'معرّف الموظف مطلوب' }, { status: 400 });
@@ -342,6 +368,10 @@ export async function PATCH(request: NextRequest) {
     if (customRoleId !== undefined) {
       updatePayload.custom_role_id = customRoleRecord ? customRoleRecord.id : null;
       updatePayload.custom_role_name = customRoleRecord ? customRoleRecord.name_ar : null;
+    }
+
+    if (isActive !== undefined) {
+      updatePayload.is_active = Boolean(isActive);
     }
 
     const { data: updatedProfile, error: updateError } = await supabaseAdmin

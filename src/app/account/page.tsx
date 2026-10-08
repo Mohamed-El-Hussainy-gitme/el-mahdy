@@ -24,6 +24,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
+import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 import { Order, OrderStatus } from '@/types';
 
 // ========================
@@ -223,12 +224,11 @@ export default function AccountPage() {
   const hasRep = !!currentUser?.assigned_sales_rep_id;
   const repPhone = currentUser?.assigned_sales_rep_phone;
   const repName = currentUser?.assigned_sales_rep_name;
-  const waPhone = hasRep && repPhone
-    ? repPhone.replace(/\D/g, '')
-    : storeSettings.whatsapp_number?.replace(/\D/g, '') || '';
+  const targetPhone = (hasRep && repPhone) ? repPhone : (storeSettings.whatsapp_number || '201012345678');
   const waMessage = hasRep
     ? `مرحباً ${repName}، أنا ${currentUser?.full_name} عميلك المسجل. أريد الاستفسار.`
     : storeSettings.whatsapp_message || 'مرحباً، أريد الاستفسار';
+  const repWhatsappLink = buildWhatsAppUrl(targetPhone, waMessage);
 
   // ---- Not logged in ----
   if (!currentUser) {
@@ -357,9 +357,9 @@ export default function AccountPage() {
               >
                 {isChangingRep ? 'إغلاق الاختيار' : 'تغيير المندوب'}
               </button>
-              {waPhone && (
+              {repWhatsappLink !== '#' && (
                 <a
-                  href={`https://wa.me/${waPhone}?text=${encodeURIComponent(waMessage)}`}
+                  href={repWhatsappLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm"

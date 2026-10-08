@@ -20,6 +20,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 
 export default function Navbar() {
   const {
@@ -62,12 +63,14 @@ export default function Navbar() {
     : null;
 
   const repWhatsappUrl = hasAssignedRep
-    ? `https://wa.me/${(currentUser!.assigned_sales_rep_phone || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+    ? buildWhatsAppUrl(
+        currentUser!.assigned_sales_rep_phone,
         'السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد في متجر MH EL MAHDY.'
-      )}`
-    : `https://wa.me/${(storeSettings.whatsapp_number || '201012345678').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+      )
+    : buildWhatsAppUrl(
+        storeSettings.whatsapp_number || '201012345678',
         storeSettings.whatsapp_message || 'السلام عليكم، أرغب في الاستفسار عن طلب توريد بالجملة من متجر MH EL MAHDY'
-      )}`;
+      );
 
 
   const router = useRouter();

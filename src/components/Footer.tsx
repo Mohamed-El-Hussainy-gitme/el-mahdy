@@ -16,19 +16,17 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 
 export default function Footer() {
   const { storeSettings, setIsShortageModalOpen } = useStore();
 
   const currentYear = new Date().getFullYear();
 
-  const whatsappCleanNumber = storeSettings.whatsapp_number
-    ? storeSettings.whatsapp_number.replace(/[^0-9]/g, '')
-    : '201012345678';
-
-  const whatsappUrl = `https://wa.me/${whatsappCleanNumber}?text=${encodeURIComponent(
+  const whatsappUrl = buildWhatsAppUrl(
+    storeSettings.whatsapp_number || '201012345678',
     storeSettings.whatsapp_message || 'السلام عليكم، أرغب في الاستفسار عن طلب توريد بالجملة من متجر MH EL MAHDY'
-  )}`;
+  );
 
   return (
     <footer className="bg-[#0F172A] text-white border-t border-slate-800 mt-16 text-xs">

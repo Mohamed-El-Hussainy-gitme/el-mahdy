@@ -72,6 +72,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
   const [isFeatured, setIsFeatured] = useState(false);
   const [hasMatrix, setHasMatrix] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const galleryFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -216,8 +217,9 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
     reader.readAsText(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
 
     const productPayload = {
       sku: sku.trim(),
@@ -240,12 +242,19 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
       return;
     }
 
-    if (editingProduct) {
-      onUpdateProduct(editingProduct.id, productPayload);
-    } else {
-      onAddProduct(productPayload);
+    setIsSaving(true);
+    try {
+      if (editingProduct) {
+        await onUpdateProduct(editingProduct.id, productPayload);
+      } else {
+        await onAddProduct(productPayload);
+      }
+      setIsModalOpen(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'حدث خطأ أثناء حفظ المنتج في قاعدة البيانات');
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -947,10 +956,11 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 bg-[#0099DD] hover:bg-[#007BB3] text-white px-5 py-2 rounded-xl font-bold shadow-sm transition text-xs"
+                disabled={isSaving}
+                className="flex items-center gap-1.5 bg-[#0099DD] hover:bg-[#007BB3] disabled:opacity-50 text-white px-5 py-2 rounded-xl font-bold shadow-sm transition text-xs"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>حفظ المنتج</span>
+                {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <span>{isSaving ? 'جاري الحفظ...' : 'حفظ المنتج'}</span>
               </button>
             </div>
           </form>

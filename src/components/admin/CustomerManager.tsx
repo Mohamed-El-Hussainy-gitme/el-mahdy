@@ -31,6 +31,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
+import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 import { UserProfile, UserRole, AssignmentType, Order, CustomRole } from '@/types';
 
 interface CustomerManagerProps {
@@ -674,9 +675,10 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
                             </div>
                             <div className="mt-1">
                               <a
-                                href={`https://wa.me/${c.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                                href={buildWhatsAppUrl(
+                                  c.phone,
                                   `مرحباً ${c.full_name}، أتواصل معك من متجر MH EL MAHDY.`
-                                )}`}
+                                )}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition"
@@ -891,9 +893,10 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
                             </div>
                             <div className="mt-1">
                               <a
-                                href={`https://wa.me/${c.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                                href={buildWhatsAppUrl(
+                                  c.phone,
                                   `مرحباً ${c.full_name}، نرحب بك في متجر MH EL MAHDY، بخصوص طلب تسجيل حسابك التجاري.`
-                                )}`}
+                                )}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition"
@@ -1966,7 +1969,10 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
               {/* Footer */}
               <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
                 <a
-                  href={`https://wa.me/${viewingCustomer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`مرحباً ${viewingCustomer.full_name}، أتواصل معك من متجر MH EL MAHDY.`)}`}
+                  href={buildWhatsAppUrl(
+                    viewingCustomer.phone,
+                    `مرحباً ${viewingCustomer.full_name}، أتواصل معك من متجر MH EL MAHDY.`
+                  )}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"

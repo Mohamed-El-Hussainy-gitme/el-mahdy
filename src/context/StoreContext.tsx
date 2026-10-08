@@ -1182,27 +1182,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase.from('products').insert({
-          id: newProdId,
-          sku: newProduct.sku,
-          title_ar: newProduct.title_ar,
-          description_ar: newProduct.description_ar || null,
-          price: newProduct.price,
-          cost_price: newProduct.cost_price,
-          image_url: newProduct.image_url,
-          gallery_urls: newProduct.gallery_urls,
-          is_exchange_only: newProduct.is_exchange_only,
-          is_featured: newProduct.is_featured,
-          is_active: true,
-          has_compatibility_matrix: newProduct.has_compatibility_matrix,
-        });
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
 
-        if (newProduct.category_ids.length > 0) {
-          const catLinks = newProduct.category_ids.map((catId) => ({
-            product_id: newProdId,
-            category_id: catId,
-          }));
-          await supabase.from('product_categories').insert(catLinks);
+        const res = await fetch('/api/admin/products', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            id: newProdId,
+            ...productData,
+          }),
+        });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          console.warn('API addProduct warning:', resData.error);
         }
       } catch (err) {
         console.warn('Supabase addProduct sync error:', err);
@@ -1220,28 +1215,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseConfigured()) {
       try {
-        const dbPayload: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if (updated.sku !== undefined) dbPayload.sku = updated.sku;
-        if (updated.title_ar !== undefined) dbPayload.title_ar = updated.title_ar;
-        if (updated.description_ar !== undefined) dbPayload.description_ar = updated.description_ar;
-        if (updated.price !== undefined) dbPayload.price = updated.price;
-        if (updated.cost_price !== undefined) dbPayload.cost_price = updated.cost_price;
-        if (updated.image_url !== undefined) dbPayload.image_url = updated.image_url || null;
-        if (updated.gallery_urls !== undefined) dbPayload.gallery_urls = updated.gallery_urls;
-        if (updated.is_exchange_only !== undefined) dbPayload.is_exchange_only = updated.is_exchange_only;
-        if (updated.is_featured !== undefined) dbPayload.is_featured = updated.is_featured;
-        if (updated.is_active !== undefined) dbPayload.is_active = updated.is_active;
-        if (updated.has_compatibility_matrix !== undefined) dbPayload.has_compatibility_matrix = updated.has_compatibility_matrix;
+        const token = await getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
 
-        await supabase.from('products').update(dbPayload).eq('id', id);
-
-        if (updated.category_ids) {
-          await supabase.from('product_categories').delete().eq('product_id', id);
-          const catLinks = updated.category_ids.map((catId) => ({
-            product_id: id,
-            category_id: catId,
-          }));
-          await supabase.from('product_categories').insert(catLinks);
+        const res = await fetch('/api/admin/products', {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            id,
+            ...updated,
+          }),
+        });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          console.warn('API updateProduct warning:', resData.error);
         }
       } catch (err) {
         console.warn('Supabase updateProduct sync error:', err);
@@ -1262,26 +1251,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (isSupabaseConfigured()) {
       try {
         const token = await getAuthToken();
-        if (token) {
-          const res = await fetch(`/api/admin/products?id=${id}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const resData = await res.json();
-          if (!res.ok || !resData.success) {
-            setProducts(previousProducts);
-            invalidateCatalogCache();
-            return { success: false, message: resData.error || 'فشل مسح المنتج من الخادم' };
-          }
-        } else {
-          await supabase.from('product_categories').delete().eq('product_id', id);
-          await supabase.from('product_model_matrix').delete().eq('product_id', id);
-          const { error } = await supabase.from('products').delete().eq('id', id);
-          if (error) {
-            setProducts(previousProducts);
-            invalidateCatalogCache();
-            return { success: false, message: error.message };
-          }
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
+        const res = await fetch(`/api/admin/products?id=${id}`, {
+          method: 'DELETE',
+          headers,
+        });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          setProducts(previousProducts);
+          invalidateCatalogCache();
+          return { success: false, message: resData.error || 'فشل مسح المنتج من الخادم' };
         }
       } catch (err: unknown) {
         setProducts(previousProducts);

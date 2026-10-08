@@ -19,8 +19,10 @@ import {
   RefreshCw,
   Heart,
   Clock,
+  MessageCircle,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
+import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 
 export default function UserAccountModal() {
   const {
@@ -235,6 +237,20 @@ export default function UserAccountModal() {
                       <div className="text-[11px] text-amber-800 font-bold bg-amber-100/70 py-1.5 px-3 rounded-xl inline-block">
                         تصفح الكتالوج والأصناف متاح لك بالكامل حالياً
                       </div>
+                      <div className="pt-1">
+                        <a
+                          href={buildWhatsAppUrl(
+                            currentUser.assigned_sales_rep_phone || storeSettings.whatsapp_number || '201012345678',
+                            `مرحباً، قمت بتسجيل حسابي التجاري باسم (${currentUser.full_name}) وهو قيد المراجعة، أرغب في تسريع الاعتماد لتصفح الأسعار وإرسال الطلبات.`
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-xs"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>تواصل مع المندوب لتسريع الاعتماد</span>
+                        </a>
+                      </div>
                     </div>
                   ) : currentUser.approval_status === 'rejected' ? (
                     <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 text-center space-y-2 shadow-sm">
@@ -309,6 +325,25 @@ export default function UserAccountModal() {
                         </button>
                       </div>
                     </div>
+                    {currentUser.assigned_sales_rep_phone && (
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-slate-500 font-mono text-[11px]" dir="ltr">
+                          {currentUser.assigned_sales_rep_phone}
+                        </span>
+                        <a
+                          href={buildWhatsAppUrl(
+                            currentUser.assigned_sales_rep_phone,
+                            `السلام عليكم أخي ${currentUser.assigned_sales_rep_name || ''}، أتواصل معك بصفتك مندوبي المعتمد في متجر MH EL MAHDY.`
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold transition shadow-xs"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>محادثة واتساب</span>
+                        </a>
+                      </div>
+                    )}
 
                     {/* Changing rep interactive form */}
                     {isChangingRep && (
@@ -492,12 +527,14 @@ export default function UserAccountModal() {
                 <a
                   href={
                     currentUser?.assigned_sales_rep_id && currentUser.assigned_sales_rep_phone
-                      ? `https://wa.me/${currentUser.assigned_sales_rep_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                      ? buildWhatsAppUrl(
+                          currentUser.assigned_sales_rep_phone,
                           `السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد (${currentUser.assigned_sales_rep_name || 'مندوبي'}) في متجر MH EL MAHDY.`
-                        )}`
-                      : `https://wa.me/${(storeSettings.whatsapp_number || '201012345678').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                        )
+                      : buildWhatsAppUrl(
+                          storeSettings.whatsapp_number || '201012345678',
                           storeSettings.whatsapp_message || 'السلام عليكم، أحتاج مساعدة أو استفسار بخصوص منتجات متجر المهدي'
-                        )}`
+                        )
                   }
                   target="_blank"
                   rel="noopener noreferrer"

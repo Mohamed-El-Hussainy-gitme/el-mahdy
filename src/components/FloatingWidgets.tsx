@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, ArrowUp, PhoneCall, HelpCircle } from 'lucide-react';
 import { useStore } from '@/context/StoreContext';
+import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 
 export default function FloatingWidgets() {
   const { currentUser, setIsShortageModalOpen, storeSettings } = useStore();
@@ -29,12 +30,11 @@ export default function FloatingWidgets() {
   const rawPhone = hasAssignedRep
     ? (currentUser!.assigned_sales_rep_phone || storeSettings?.whatsapp_number || '201012345678')
     : (storeSettings?.whatsapp_number || '201012345678');
-  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
 
   const message = hasAssignedRep
     ? `السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد (${currentUser!.assigned_sales_rep_name}) في متجر MH EL MAHDY.`
     : (storeSettings?.whatsapp_message || 'السلام عليكم، أتواصل معك من متجر MH EL MAHDY.');
-  const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  const whatsappUrl = buildWhatsAppUrl(rawPhone, message);
 
   const buttonTitle = hasAssignedRep
     ? `تواصل مباشر عبر واتساب مع مندوبك (${currentUser!.assigned_sales_rep_name})`

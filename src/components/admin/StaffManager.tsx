@@ -491,8 +491,31 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
   const handleToggleActive = async (staff: UserProfile) => {
     if (!isSupabaseConfigured()) return;
     const newStatus = !staff.is_active;
-    await supabase.from('user_profiles').update({ is_active: newStatus }).eq('id', staff.id);
+    // Optimistic update
     setStaffList((prev) => prev.map((s) => (s.id === staff.id ? { ...s, is_active: newStatus } : s)));
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
+      const res = await fetch('/api/admin/staff', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ id: staff.id, isActive: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        // Rollback on failure
+        setStaffList((prev) => prev.map((s) => (s.id === staff.id ? { ...s, is_active: !newStatus } : s)));
+        alert(data.error || 'فشل تحديث حالة الموظف');
+      }
+    } catch (err: unknown) {
+      // Rollback on network error
+      setStaffList((prev) => prev.map((s) => (s.id === staff.id ? { ...s, is_active: !newStatus } : s)));
+      alert(err instanceof Error ? err.message : 'حدث خطأ غير متوقع');
+    }
   };
 
   if (!isAdmin) {

@@ -47,3 +47,38 @@ export function formatEgyptianPhoneDisplay(phone: string | null | undefined): st
   }
   return norm;
 }
+
+/**
+ * Normalizes an Egyptian phone number for WhatsApp wa.me links.
+ * Converts local 01xxxxxxxxx (11 digits) to 201xxxxxxxxx.
+ * If already starts with 20 or 0020, handles appropriately.
+ */
+export function formatWhatsAppPhone(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const local = normalizeEgyptianPhone(phone);
+  if (local.startsWith('0') && local.length === 11) {
+    return '20' + local.slice(1);
+  }
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.startsWith('0020')) {
+    return digits.slice(2);
+  }
+  if (digits.startsWith('20')) {
+    return digits;
+  }
+  if (digits.startsWith('0') && digits.length === 11) {
+    return '20' + digits.slice(1);
+  }
+  return digits;
+}
+
+/**
+ * Builds a valid https://wa.me/ URL with proper Egyptian country code and encoded message.
+ */
+export function buildWhatsAppUrl(phone: string | null | undefined, message?: string): string {
+  const waNumber = formatWhatsAppPhone(phone);
+  if (!waNumber) return '#';
+  const textParam = message ? `?text=${encodeURIComponent(message)}` : '';
+  return `https://wa.me/${waNumber}${textParam}`;
+}
+

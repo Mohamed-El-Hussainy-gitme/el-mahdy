@@ -20,6 +20,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
+import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 
 export default function CartDrawer() {
   const {
@@ -150,8 +151,14 @@ export default function CartDrawer() {
                   <a
                     href={
                       currentUser?.assigned_sales_rep_id && currentUser.assigned_sales_rep_phone
-                        ? `https://wa.me/${currentUser.assigned_sales_rep_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`مرحباً، قمت بتسجيل طلب تجاري رقم ${submittedOrderNumber} بقيمة ${cartTotal.toFixed(2)} ج.م، برجاء المراجعة والتأكيد.`)}`
-                        : `https://wa.me/${(storeSettings.whatsapp_number || '201012345678').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`مرحباً، قمت بتسجيل طلب تجاري رقم ${submittedOrderNumber} بقيمة ${cartTotal.toFixed(2)} ج.م، برجاء المراجعة والتأكيد.`)}`
+                        ? buildWhatsAppUrl(
+                            currentUser.assigned_sales_rep_phone,
+                            `مرحباً، قمت بتسجيل طلب تجاري رقم ${submittedOrderNumber} بقيمة ${cartTotal.toFixed(2)} ج.م، برجاء المراجعة والتأكيد.`
+                          )
+                        : buildWhatsAppUrl(
+                            storeSettings.whatsapp_number || '201012345678',
+                            `مرحباً، قمت بتسجيل طلب تجاري رقم ${submittedOrderNumber} بقيمة ${cartTotal.toFixed(2)} ج.م، برجاء المراجعة والتأكيد.`
+                          )
                     }
                     target="_blank"
                     rel="noopener noreferrer"
