@@ -221,9 +221,14 @@ export default function AccountPage() {
   );
 
   // Rep contact info
+  const assignedRep = useMemo(() => {
+    if (!currentUser?.assigned_sales_rep_id) return null;
+    return staffMembers.find((s) => s.id === currentUser.assigned_sales_rep_id) || null;
+  }, [currentUser?.assigned_sales_rep_id, staffMembers]);
+
   const hasRep = !!currentUser?.assigned_sales_rep_id;
-  const repPhone = currentUser?.assigned_sales_rep_phone;
-  const repName = currentUser?.assigned_sales_rep_name;
+  const repPhone = currentUser?.assigned_sales_rep_phone || assignedRep?.phone;
+  const repName = currentUser?.assigned_sales_rep_name || assignedRep?.full_name || 'مندوبك المعتمد';
   const targetPhone = (hasRep && repPhone) ? repPhone : (storeSettings.whatsapp_number || '201012345678');
   const waMessage = hasRep
     ? `مرحباً ${repName}، أنا ${currentUser?.full_name} عميلك المسجل. أريد الاستفسار.`

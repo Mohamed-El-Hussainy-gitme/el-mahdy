@@ -678,8 +678,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (currentUserId) {
           const freshSelf = custList.find((c) => c.id === currentUserId);
           if (freshSelf) {
-            setCurrentUser(freshSelf);
-            try { localStorage.setItem('mh_mahdy_user', JSON.stringify(freshSelf)); } catch {}
+            setCurrentUser((prev) => {
+              const repId = freshSelf.assigned_sales_rep_id || prev?.assigned_sales_rep_id;
+              const rep = staffMembers.find((s) => s.id === repId);
+              const merged: UserProfile = {
+                ...freshSelf,
+                assigned_sales_rep_id: repId,
+                assigned_sales_rep_name: freshSelf.assigned_sales_rep_name || rep?.full_name || prev?.assigned_sales_rep_name,
+                assigned_sales_rep_phone: freshSelf.assigned_sales_rep_phone || rep?.phone || prev?.assigned_sales_rep_phone,
+              };
+              try { localStorage.setItem('mh_mahdy_user', JSON.stringify(merged)); } catch {}
+              return merged;
+            });
           }
         }
       }
@@ -752,6 +762,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setStaffMembers([DEFAULT_STICKY_SALES_REP]);
         }
       }
+
+      // Ensure currentUser has rep contact info populated if assigned_sales_rep_id exists
+      const effectiveStaff = staffList.length > 0 ? staffList : [DEFAULT_STICKY_SALES_REP];
+      setCurrentUser((prev) => {
+        if (!prev || !prev.assigned_sales_rep_id) return prev;
+        const rep = effectiveStaff.find((s) => s.id === prev.assigned_sales_rep_id);
+        if (!rep) return prev;
+        if (prev.assigned_sales_rep_phone && prev.assigned_sales_rep_name) return prev;
+        const updated = {
+          ...prev,
+          assigned_sales_rep_name: prev.assigned_sales_rep_name || rep.full_name,
+          assigned_sales_rep_phone: prev.assigned_sales_rep_phone || rep.phone,
+        };
+        try { localStorage.setItem('mh_mahdy_user', JSON.stringify(updated)); } catch {}
+        return updated;
+      });
 
 
       // Custom Roles List
@@ -2215,11 +2241,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase.rpc('sp_customer_choose_sales_rep', {
+        const { data: rpcRes } = await supabase.rpc('sp_customer_choose_sales_rep', {
           p_customer_id: currentUser.id,
           p_sales_rep_id: chosenRep ? chosenRep.id : null,
           p_notes: finalNotes,
         });
+
+        if (rpcRes && rpcRes.success) {
+          const finalUser: UserProfile = {
+            ...updatedUser,
+            assigned_sales_rep_id: rpcRes.sales_rep_id || updatedUser.assigned_sales_rep_id,
+            assigned_sales_rep_name: rpcRes.sales_rep_name || updatedUser.assigned_sales_rep_name,
+            assigned_sales_rep_phone: rpcRes.sales_rep_phone || updatedUser.assigned_sales_rep_phone,
+          };
+          setCurrentUser(finalUser);
+          try { localStorage.setItem('mh_mahdy_user', JSON.stringify(finalUser)); } catch {}
+        }
       } catch (e) {
         console.warn('sp_customer_choose_sales_rep error:', e);
       }

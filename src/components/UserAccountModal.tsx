@@ -82,8 +82,16 @@ export default function UserAccountModal() {
     }
   }, [preferredRepMode, selectedSalesRepId, availableReps]);
 
-  // State for logged-in user changing sales rep
   const [isChangingRep, setIsChangingRep] = useState(false);
+
+  // Dynamically resolve sales rep details if currentUser only has assigned_sales_rep_id
+  const currentAssignedRep = React.useMemo(() => {
+    if (!currentUser?.assigned_sales_rep_id) return null;
+    return staffMembers.find((s) => s.id === currentUser.assigned_sales_rep_id) || null;
+  }, [currentUser?.assigned_sales_rep_id, staffMembers]);
+
+  const effectiveRepPhone = currentUser?.assigned_sales_rep_phone || currentAssignedRep?.phone;
+  const effectiveRepName = currentUser?.assigned_sales_rep_name || currentAssignedRep?.full_name;
 
   const [changeRepMode, setChangeRepMode] = useState<'auto' | 'custom'>('custom');
   const [changeRepSelectedId, setChangeRepSelectedId] = useState<string>('');
@@ -240,7 +248,7 @@ export default function UserAccountModal() {
                       <div className="pt-1">
                         <a
                           href={buildWhatsAppUrl(
-                            currentUser.assigned_sales_rep_phone || storeSettings.whatsapp_number || '201012345678',
+                            effectiveRepPhone || storeSettings.whatsapp_number || '201012345678',
                             `مرحباً، قمت بتسجيل حسابي التجاري باسم (${currentUser.full_name}) وهو قيد المراجعة، أرغب في تسريع الاعتماد لتصفح الأسعار وإرسال الطلبات.`
                           )}
                           target="_blank"
@@ -307,7 +315,7 @@ export default function UserAccountModal() {
                       <span className="text-slate-600 font-medium">المندوب المعتمد لخدمتك:</span>
                       <div className="flex items-center gap-1.5">
                         <span className="font-bold text-[#0099DD]">
-                          {currentUser.assigned_sales_rep_name || 'سيتم التعيين تلقائياً'}
+                          {effectiveRepName || 'سيتم التعيين تلقائياً'}
                         </span>
                         <button
                           type="button"
@@ -325,15 +333,17 @@ export default function UserAccountModal() {
                         </button>
                       </div>
                     </div>
-                    {currentUser.assigned_sales_rep_phone && (
+                    {(effectiveRepPhone || currentUser.assigned_sales_rep_id) && (
                       <div className="flex items-center justify-between pt-1">
-                        <span className="text-slate-500 font-mono text-[11px]" dir="ltr">
-                          {currentUser.assigned_sales_rep_phone}
-                        </span>
+                        {effectiveRepPhone && (
+                          <span className="text-slate-500 font-mono text-[11px]" dir="ltr">
+                            {effectiveRepPhone}
+                          </span>
+                        )}
                         <a
                           href={buildWhatsAppUrl(
-                            currentUser.assigned_sales_rep_phone,
-                            `السلام عليكم أخي ${currentUser.assigned_sales_rep_name || ''}، أتواصل معك بصفتك مندوبي المعتمد في متجر MH EL MAHDY.`
+                            effectiveRepPhone || storeSettings.whatsapp_number || '201012345678',
+                            `السلام عليكم أخي ${effectiveRepName || ''}، أتواصل معك بصفتك مندوبي المعتمد في متجر MH EL MAHDY.`
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -526,10 +536,10 @@ export default function UserAccountModal() {
 
                 <a
                   href={
-                    currentUser?.assigned_sales_rep_id && currentUser.assigned_sales_rep_phone
+                    effectiveRepPhone
                       ? buildWhatsAppUrl(
-                          currentUser.assigned_sales_rep_phone,
-                          `السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد (${currentUser.assigned_sales_rep_name || 'مندوبي'}) في متجر MH EL MAHDY.`
+                          effectiveRepPhone,
+                          `السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد (${effectiveRepName || 'مندوبي'}) في متجر MH EL MAHDY.`
                         )
                       : buildWhatsAppUrl(
                           storeSettings.whatsapp_number || '201012345678',

@@ -65,6 +65,13 @@ export default function CartDrawer() {
     return [DEFAULT_STICKY_SALES_REP];
   }, [staffMembers, customRoles]);
 
+  const assignedRep = React.useMemo(() => {
+    if (!currentUser?.assigned_sales_rep_id) return null;
+    return staffMembers.find((s) => s.id === currentUser.assigned_sales_rep_id) || null;
+  }, [currentUser?.assigned_sales_rep_id, staffMembers]);
+
+  const effectiveRepPhone = currentUser?.assigned_sales_rep_phone || assignedRep?.phone;
+
   if (!isCartOpen) return null;
 
   const handleCheckout = async (e: React.FormEvent) => {
@@ -150,9 +157,9 @@ export default function CartDrawer() {
                 <div className="pt-4 flex flex-col gap-2">
                   <a
                     href={
-                      currentUser?.assigned_sales_rep_id && currentUser.assigned_sales_rep_phone
+                      effectiveRepPhone
                         ? buildWhatsAppUrl(
-                            currentUser.assigned_sales_rep_phone,
+                            effectiveRepPhone,
                             `مرحباً، قمت بتسجيل طلب تجاري رقم ${submittedOrderNumber} بقيمة ${cartTotal.toFixed(2)} ج.م، برجاء المراجعة والتأكيد.`
                           )
                         : buildWhatsAppUrl(

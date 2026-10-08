@@ -43,6 +43,7 @@ export default function Navbar() {
     wishlist,
     setIsWishlistOpen,
     storeSettings,
+    staffMembers,
   } = useStore();
 
   const [isCatalogDropdownOpen, setIsCatalogDropdownOpen] = useState(false);
@@ -54,18 +55,24 @@ export default function Navbar() {
   }, []);
 
   // ── Sales Rep / Store WhatsApp Badge Logic ──────────────────────────────────
-  // Only show "مندوبك: X" if there is an actual logged-in customer with a real assigned rep.
-  // For guests or customers without an assigned rep yet, show the store's general WhatsApp.
-  const hasAssignedRep = isMounted && !!currentUser && !!currentUser.assigned_sales_rep_id;
+  const currentAssignedRep = React.useMemo(() => {
+    if (!currentUser?.assigned_sales_rep_id) return null;
+    return staffMembers.find((s) => s.id === currentUser.assigned_sales_rep_id) || null;
+  }, [currentUser?.assigned_sales_rep_id, staffMembers]);
+
+  const repPhone = currentUser?.assigned_sales_rep_phone || currentAssignedRep?.phone;
+  const repName = currentUser?.assigned_sales_rep_name || currentAssignedRep?.full_name;
+
+  const hasAssignedRep = isMounted && !!currentUser && (!!currentUser.assigned_sales_rep_id || !!repPhone);
 
   const repFirstName = hasAssignedRep
-    ? (currentUser!.assigned_sales_rep_name || '').split(' ')[0] || 'مندوبك'
+    ? (repName || '').split(' ')[0] || 'مندوبك'
     : null;
 
-  const repWhatsappUrl = hasAssignedRep
+  const repWhatsappUrl = (hasAssignedRep && repPhone)
     ? buildWhatsAppUrl(
-        currentUser!.assigned_sales_rep_phone,
-        'السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد في متجر MH EL MAHDY.'
+        repPhone,
+        `السلام عليكم أخي ${repName || ''}، أتواصل معك بصفتك مندوبي المعتمد في متجر MH EL MAHDY.`
       )
     : buildWhatsAppUrl(
         storeSettings.whatsapp_number || '201012345678',

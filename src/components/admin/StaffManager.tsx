@@ -218,12 +218,15 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
         return;
       }
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
       const response = await fetch('/api/admin/staff', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({
           fullName: addFullName.trim(),
           email: finalEmail,
@@ -306,12 +309,15 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
         payload.password = editPassword.trim();
       }
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
       const response = await fetch('/api/admin/staff', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -465,11 +471,13 @@ export function StaffManager({ currentRole }: StaffManagerProps) {
         return;
       }
 
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (staffSession?.id) headers['x-staff-id'] = staffSession.id;
+
       const response = await fetch(`/api/admin/staff?id=${deletingStaff.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers,
       });
 
       const resData = await response.json();

@@ -6,7 +6,7 @@ import { useStore } from '@/context/StoreContext';
 import { buildWhatsAppUrl } from '@/utils/phoneUtils';
 
 export default function FloatingWidgets() {
-  const { currentUser, setIsShortageModalOpen, storeSettings } = useStore();
+  const { currentUser, setIsShortageModalOpen, storeSettings, staffMembers } = useStore();
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -25,21 +25,28 @@ export default function FloatingWidgets() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const assignedRep = React.useMemo(() => {
+    if (!currentUser?.assigned_sales_rep_id) return null;
+    return staffMembers.find((s) => s.id === currentUser.assigned_sales_rep_id) || null;
+  }, [currentUser?.assigned_sales_rep_id, staffMembers]);
+
   const hasAssignedRep = !!currentUser && !!currentUser.assigned_sales_rep_id;
+  const repPhone = currentUser?.assigned_sales_rep_phone || assignedRep?.phone;
+  const repName = currentUser?.assigned_sales_rep_name || assignedRep?.full_name || 'مندوبك المعتمد';
 
   const rawPhone = hasAssignedRep
-    ? (currentUser!.assigned_sales_rep_phone || storeSettings?.whatsapp_number || '201012345678')
+    ? (repPhone || storeSettings?.whatsapp_number || '201012345678')
     : (storeSettings?.whatsapp_number || '201012345678');
 
   const message = hasAssignedRep
-    ? `السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد (${currentUser!.assigned_sales_rep_name}) في متجر MH EL MAHDY.`
+    ? `السلام عليكم، أتواصل معك بصفتك مندوبي المعتمد (${repName}) في متجر MH EL MAHDY.`
     : (storeSettings?.whatsapp_message || 'السلام عليكم، أتواصل معك من متجر MH EL MAHDY.');
   const whatsappUrl = buildWhatsAppUrl(rawPhone, message);
 
   const buttonTitle = hasAssignedRep
-    ? `تواصل مباشر عبر واتساب مع مندوبك (${currentUser!.assigned_sales_rep_name})`
+    ? `تواصل مباشر عبر واتساب مع مندوبك (${repName})`
     : 'تواصل معنا عبر واتساب';
-  const buttonLabel = hasAssignedRep ? 'واتساب مندوبك' : 'تواصل معنا';
+  const buttonLabel = hasAssignedRep ? `واتساب ${repName.split(' ')[0]}` : 'تواصل معنا';
 
   return (
     <>

@@ -159,50 +159,122 @@ export async function POST(request: NextRequest) {
     // Check if email or phone is already used in user_profiles
     const { data: existingProfile } = await supabaseAdmin
       .from('user_profiles')
-      .select('id, email, phone, full_name, role')
+      .select('id, email, phone, full_name, role, auth_user_id')
       .or(`email.eq.${cleanEmail},phone.eq.${cleanPhone}`)
       .maybeSingle();
 
-    if (existingProfile) {
+    if (existingProfile && existingProfile.role !== 'customer') {
       return NextResponse.json(
         {
           success: false,
-          error: `البيانات مسجلة بالفعل للموظف (${existingProfile.full_name}) بريد: ${existingProfile.email}. يرجى استخدام بريد إلكتروني أو هاتف مختلف، أو تعديل حسابه القائم من جدول الموظفين.`,
+          error: `البيانات مسجلة بالفعل للموظف (${existingProfile.full_name}). يمكنك تعديل حسابه القائم مباشرة من جدول الموظفين.`,
         },
         { status: 400 }
       );
     }
 
-    // 1. Create auth user in Supabase
-    let authUserId: string | null = null;
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: cleanEmail,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: cleanName,
-        phone: cleanPhone,
-        role: normalizedRole,
-        custom_role_id: customRoleRecord ? customRoleRecord.id : null,
-        custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
-      },
-    });
+    // 1. Create or update auth user in Supabase
+    let authUserId: string | null = existingProfile?.auth_user_id || null;
 
-    if (authError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `فشل إنشاء حساب الموظف: ${authError.message}. إذا كان البريد مستخدماً مسبقاً، يرجى كتابة بريد آخر.`,
+    if (authUserId) {
+      // Existing auth user linked to this profile: update password and metadata
+      await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+        email: cleanEmail,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: cleanName,
+          phone: cleanPhone,
+          role: normalizedRole,
+          custom_role_id: customRoleRecord ? customRoleRecord.id : null,
+          custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
         },
-        { status: 400 }
-      );
+      });
+    } else {
+      let { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: cleanName,
+          phone: cleanPhone,
+          role: normalizedRole,
+          custom_role_id: customRoleRecord ? customRoleRecord.id : null,
+          custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
+        },
+      });
+
+      if (authError && (authError.message?.toLowerCase().includes('already') || authError.message?.includes('registered'))) {
+        // User exists in Supabase Auth from a previous session or customer login
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const existingAuthUser = listData?.users?.find(
+          (u: any) => u.email?.toLowerCase() === cleanEmail.toLowerCase()
+        );
+        if (existingAuthUser) {
+          authUserId = existingAuthUser.id;
+          await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+            password: password,
+            user_metadata: {
+              full_name: cleanName,
+              phone: cleanPhone,
+              role: normalizedRole,
+              custom_role_id: customRoleRecord ? customRoleRecord.id : null,
+              custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
+            },
+          });
+          authError = null;
+        }
+      }
+
+      if (authError) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `فشل إنشاء حساب الموظف: ${authError.message}. إذا كان البريد مستخدماً مسبقاً، يرجى كتابة بريد آخر.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      authUserId = authUserId || authData?.user?.id || null;
     }
 
-    authUserId = authData.user?.id || null;
-
-    // 2. Fetch profile (which may have already been auto-created by the DB trigger) or insert it
+    // 2. If this was an existing customer profile, upgrade it to staff directly
     let profile: any = null;
 
+    if (existingProfile && existingProfile.role === 'customer') {
+      const { data: upgradedProfile, error: upgradeErr } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          auth_user_id: authUserId,
+          full_name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          role: normalizedRole,
+          is_active: true,
+          custom_role_id: customRoleRecord ? customRoleRecord.id : null,
+          custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingProfile.id)
+        .select('*, custom_role:custom_roles(*)')
+        .single();
+
+      if (upgradeErr) {
+        return NextResponse.json(
+          { success: false, error: `فشل ترقية حساب الموظف: ${upgradeErr.message}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'تم ترقية وتفعيل حساب الموظف بنجاح وإدراجه في طاقم العمل',
+        staff: upgradedProfile,
+      });
+    }
+
+    // 3. Otherwise, check if DB trigger auto-created the profile or insert it
     const { data: existingTriggerProfile } = await supabaseAdmin
       .from('user_profiles')
       .select('*')
@@ -224,7 +296,7 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingTriggerProfile.id)
-        .select()
+        .select('*, custom_role:custom_roles(*)')
         .single();
 
       if (updateErr) {
@@ -248,7 +320,7 @@ export async function POST(request: NextRequest) {
           custom_role_id: customRoleRecord ? customRoleRecord.id : null,
           custom_role_name: customRoleRecord ? customRoleRecord.name_ar : null,
         })
-        .select()
+        .select('*, custom_role:custom_roles(*)')
         .single();
 
       if (insertErr) {
