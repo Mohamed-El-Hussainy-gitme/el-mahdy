@@ -35,7 +35,7 @@ const nextConfig = {
   async headers() {
     const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
       ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host
-      : 'dxkkeilasmafqvpveldi.supabase.co';
+      : 'dsoweayuqbdceymsuiii.supabase.co';
 
     const csp = [
       `default-src 'self'`,

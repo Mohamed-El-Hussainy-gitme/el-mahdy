@@ -2,11 +2,12 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 /**
  * Compresses an image file using the Canvas API before upload.
- * - Resizes to max 1600px on the longest side.
- * - Re-encodes as JPEG at 82% quality (good balance for B2B product images).
+ * - Converts to ultra-efficient WebP format (or JPEG fallback).
+ * - Resizes to max 1000px on the longest side (optimal for high-DPI product display).
+ * - Compresses with quality 0.78 (visually sharp, ~30-50KB size).
  * - Falls back to the original file if Canvas is unavailable (SSR / Node env).
  */
-async function compressImage(file: File, maxPx = 1600, quality = 0.82): Promise<File> {
+async function compressImage(file: File, maxPx = 1000, quality = 0.78): Promise<File> {
   // Guard: only run in browser with Canvas support
   if (typeof window === 'undefined' || !('HTMLCanvasElement' in window)) {
     return file;
@@ -40,17 +41,22 @@ async function compressImage(file: File, maxPx = 1600, quality = 0.82): Promise<
 
       ctx.drawImage(img, 0, 0, width, height);
 
+      // Check if browser supports WebP canvas export
+      const supportsWebp = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+      const targetMime = supportsWebp ? 'image/webp' : 'image/jpeg';
+      const targetExt = supportsWebp ? '.webp' : '_c.jpg';
+
       canvas.toBlob(
         (blob) => {
           if (!blob) {
             resolve(file); // toBlob failed, keep original
             return;
           }
-          // Use .jpg extension for the compressed output
-          const compressedName = file.name.replace(/\.[^/.]+$/, '') + '_c.jpg';
-          resolve(new File([blob], compressedName, { type: 'image/jpeg' }));
+          const baseName = file.name.replace(/\.[^/.]+$/, '');
+          const compressedName = `${baseName}${targetExt}`;
+          resolve(new File([blob], compressedName, { type: targetMime }));
         },
-        'image/jpeg',
+        targetMime,
         quality,
       );
     };

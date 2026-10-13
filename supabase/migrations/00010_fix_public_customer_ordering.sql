@@ -1,4 +1,4 @@
-﻿-- ==============================================================================
+-- ==============================================================================
 -- MH EL MAHDY Store — Migration 00010: Fix Public Customer Ordering & RLS
 -- Version   : 00010
 -- Created   : 2026-09-09
@@ -90,7 +90,7 @@ create or replace function public.sp_create_pending_order(
 returns jsonb
 language plpgsql
 security definer
-as 
+as $$
 declare
   v_customer_id    uuid;
   v_order_id       uuid;
@@ -195,4 +195,4 @@ begin
     'customer_id', v_customer_id
   );
 end;
-;
+$$;

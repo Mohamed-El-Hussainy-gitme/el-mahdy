@@ -31,3 +31,9 @@ yarn-error.log*
 .DS_Store
 *.pem
 Thumbs.db
+
+# Large photo folders & archives
+products photo/
+products photo webp/
+*.zip
+*.csv
