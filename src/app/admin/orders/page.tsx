@@ -5,7 +5,15 @@ import { useStore } from '@/context/StoreContext';
 import { OrdersManager } from '@/components/admin/OrdersManager';
 
 export default function AdminOrdersPage() {
-  const { orders, staffSession, updateOrderStatus, assignCustomerSalesRep } = useStore();
+  const {
+    orders,
+    staffSession,
+    products,
+    masterModels,
+    updateOrderStatus,
+    updateOrderItems,
+    assignCustomerSalesRep,
+  } = useStore();
 
   if (!staffSession) return null;
 
@@ -13,7 +21,10 @@ export default function AdminOrdersPage() {
     <OrdersManager
       orders={orders}
       staffSession={staffSession}
+      products={products}
+      masterModels={masterModels}
       onUpdateOrderStatus={updateOrderStatus}
+      onUpdateOrderItems={updateOrderItems}
       onAssignSalesRep={assignCustomerSalesRep}
     />
   );

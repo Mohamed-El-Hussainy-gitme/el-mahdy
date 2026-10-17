@@ -19,14 +19,18 @@ import {
   Printer,
   FileText,
   X,
+  Edit3,
 } from 'lucide-react';
-import { Order, OrderStatus, UserProfile, UserRole, ReturnReason } from '@/types';
+import { Order, OrderStatus, UserProfile, UserRole, ReturnReason, Product, MasterModel, OrderItem } from '@/types';
 import { canTransitionOrder, getOrderStatusBadge, filterOrdersForRole } from '@/services/orderService';
 import { printPickingSlip, printDeliveryInvoice } from '@/lib/print';
+import { OrderEditModal } from './OrderEditModal';
 
 interface OrdersManagerProps {
   orders: Order[];
   staffSession: UserProfile;
+  products?: Product[];
+  masterModels?: MasterModel[];
   onUpdateOrderStatus: (
     orderId: string,
     newStatus: OrderStatus,
@@ -36,19 +40,28 @@ interface OrdersManagerProps {
     returnReason?: ReturnReason,
     returnNotes?: string
   ) => void | Promise<any>;
+  onUpdateOrderItems?: (
+    orderId: string,
+    items: OrderItem[],
+    editReason?: string
+  ) => Promise<{ success: boolean; message?: string }>;
   onAssignSalesRep?: (customerId: string, salesRepId: string) => void | Promise<any>;
 }
 
 export const OrdersManager: React.FC<OrdersManagerProps> = ({
   orders,
   staffSession,
+  products = [],
+  masterModels = [],
   onUpdateOrderStatus,
+  onUpdateOrderItems,
   onAssignSalesRep,
 }) => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [trackingNotesInput, setTrackingNotesInput] = useState<Record<string, string>>({});
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   // Shipping Modal State
   const [shippingModalOrder, setShippingModalOrder] = useState<Order | null>(null);
@@ -278,6 +291,21 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
                       </span>
                     </div>
 
+                    {['pending', 'preparation'].includes(order.status) && onUpdateOrderItems && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingOrder(order);
+                        }}
+                        className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+                        title="تعديل بنود الفاتورة والكميات والأسعار"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">تعديل</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
                       className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition"
@@ -486,6 +514,18 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
                           <span>فاتورة التسليم</span>
                         </button>
 
+                        {onUpdateOrderItems && ['pending', 'preparation'].includes(order.status) && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingOrder(order)}
+                            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer"
+                            title="تعديل بنود الفاتورة والكميات والأسعار"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>تعديل الفاتورة</span>
+                          </button>
+                        )}
+
                         <input
                           type="text"
                           placeholder="ملاحظات تتبع الشحنة..."
@@ -672,6 +712,27 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Order Item Editing Modal (Sales Rep & Admin) */}
+      {editingOrder && (
+        <OrderEditModal
+          order={editingOrder}
+          isOpen={Boolean(editingOrder)}
+          onClose={() => setEditingOrder(null)}
+          products={products}
+          masterModels={masterModels}
+          onSave={async (orderId, updatedItems, reason) => {
+            if (!onUpdateOrderItems) {
+              return { success: false, message: 'ميزة تعديل الفاتورة غير مفعلة' };
+            }
+            const res = await onUpdateOrderItems(orderId, updatedItems, reason);
+            if (res.success) {
+              setEditingOrder(null);
+            }
+            return res;
+          }}
+        />
       )}
     </div>
   );

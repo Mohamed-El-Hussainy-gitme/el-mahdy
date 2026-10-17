@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import Navbar from '@/components/Navbar';
 import ProductCard from '@/components/ProductCard';
 import CompatibilityModal from '@/components/CompatibilityModal';
@@ -89,7 +90,7 @@ export default function CatalogsPage() {
               {featuredProducts.map(product => (
                 <div key={product.id} className="min-w-[240px] flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100 hover:border-[#0099DD]/50 transition group">
                   <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-white shrink-0">
-                    <Image src={product.image_url || '/placeholder.svg'} alt={product.title_ar} fill className="object-cover group-hover:scale-105 transition" />
+                    <SafeProductImage src={product.image_url} alt={product.title_ar} fill className="object-cover group-hover:scale-105 transition" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-xs font-bold text-slate-800 line-clamp-2 leading-tight group-hover:text-[#0099DD] transition">
@@ -128,7 +129,7 @@ export default function CatalogsPage() {
                 
                 <div className="relative w-20 h-20 rounded-full border-2 border-slate-200 overflow-hidden mb-4 group-hover:border-[#0099DD] group-hover:scale-105 transition-all duration-300 bg-slate-50 flex items-center justify-center shrink-0">
                   {catImage ? (
-                    <Image
+                    <SafeProductImage
                       src={catImage}
                       alt={cat.name_ar}
                       fill

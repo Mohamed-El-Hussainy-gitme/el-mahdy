@@ -3,6 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import {
   Layers,
   ArrowLeft,
@@ -181,7 +182,7 @@ function CatalogSection() {
                   >
                     {catImage ? (
                       <div className="relative w-full h-full rounded-full overflow-hidden">
-                        <Image
+                        <SafeProductImage
                           src={catImage}
                           alt={cat.name_ar}
                           fill
@@ -299,8 +300,8 @@ function CatalogSection() {
                 className="w-44 shrink-0 bg-slate-50/70 border border-slate-200 rounded-xl p-2.5 flex flex-col justify-between hover:border-[#0099DD] hover:bg-white transition shadow-sm group"
               >
                 <Link href={`/products/${item.id}`} className="block relative w-full h-24 rounded-lg overflow-hidden bg-white mb-2">
-                  <Image
-                    src={item.image_url || '/placeholder.svg'}
+                  <SafeProductImage
+                    src={item.image_url}
                     alt={item.title_ar}
                     fill
                     sizes="176px"

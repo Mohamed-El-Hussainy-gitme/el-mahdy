@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import {
   X,
   Search,
@@ -89,8 +90,8 @@ export default function CompatibilityModal() {
         <div className="bg-[#0F172A] text-white p-4 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-white shrink-0">
-              <Image
-                src={compatibilityProduct.image_url || '/placeholder.svg'}
+              <SafeProductImage
+                src={compatibilityProduct.image_url}
                 alt={compatibilityProduct.title_ar}
                 fill
                 className="object-cover"

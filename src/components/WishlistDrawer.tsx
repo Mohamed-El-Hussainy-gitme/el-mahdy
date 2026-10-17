@@ -3,6 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import {
   X,
   Heart,
@@ -123,8 +124,8 @@ export default function WishlistDrawer() {
                   >
                     {/* Thumbnail */}
                     <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-50 shrink-0 border border-slate-100">
-                      <Image
-                        src={product.image_url || '/placeholder.svg'}
+                      <SafeProductImage
+                        src={product.image_url}
                         alt={product.title_ar}
                         fill
                         className="object-cover"

@@ -78,8 +78,10 @@ export function validateProductData(data: Partial<Product>): { valid: boolean; e
     errors.push('عنوان المنتج بالعربية مطلوب.');
   }
 
-  if (data.price === undefined || data.price === null || data.price < 0) {
-    errors.push('السعر يجب أن يكون رقماً موجباً أو صفراً.');
+  if (data.price === undefined || data.price === null || data.price <= 0) {
+    if (!data.is_exchange_only) {
+      errors.push('سعر بيع المنتج مطلوب ويجب أن يكون أكبر من صفر (ج.م).');
+    }
   }
 
   if (!data.image_url || data.image_url.trim().length === 0) {

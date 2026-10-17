@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import {
   X,
   Trash2,
@@ -210,8 +211,8 @@ export default function CartDrawer() {
                     <div key={idx} className="py-3 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
-                          <Image
-                            src={item.product.image_url || '/placeholder.svg'}
+                          <SafeProductImage
+                            src={item.product.image_url}
                             alt={item.product.title_ar}
                             fill
                             className="object-cover"

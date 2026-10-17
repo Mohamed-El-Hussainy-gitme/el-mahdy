@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
 import { buildWhatsAppUrl } from '@/utils/phoneUtils';
+import { UserProfile } from '@/types';
 
 export default function UserAccountModal() {
   const {
@@ -55,8 +56,8 @@ export default function UserAccountModal() {
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regCompany, setRegCompany] = useState('');
-  const [preferredRepMode, setPreferredRepMode] = useState<'auto' | 'custom'>('auto');
   const [selectedSalesRepId, setSelectedSalesRepId] = useState<string>('');
+  const [referredRep, setReferredRep] = useState<UserProfile | null>(null);
   const [regError, setRegError] = useState('');
   const [regLoading, setRegLoading] = useState(false);
 
@@ -75,14 +76,30 @@ export default function UserAccountModal() {
     return [DEFAULT_STICKY_SALES_REP];
   }, [staffMembers, customRoles]);
 
-  // Auto-select first available sales rep when switching to custom mode
+  // Check URL / localStorage for sales rep referral parameter (?rep=... or ?ref=...)
   React.useEffect(() => {
-    if (preferredRepMode === 'custom' && !selectedSalesRepId && availableReps.length > 0) {
-      setSelectedSalesRepId(availableReps[0].id);
-    }
-  }, [preferredRepMode, selectedSalesRepId, availableReps]);
-
-  const [isChangingRep, setIsChangingRep] = useState(false);
+    if (typeof window === 'undefined') return;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const repQuery = urlParams.get('rep') || urlParams.get('ref');
+      const refKey = repQuery || localStorage.getItem('mh_rep_ref');
+      if (refKey && availableReps.length > 0) {
+        localStorage.setItem('mh_rep_ref', refKey);
+        const match = availableReps.find(
+          (r) => r.id === refKey || r.phone === refKey || (r.phone && refKey.endsWith(r.phone.slice(-9)))
+        );
+        if (match) {
+          setReferredRep(match);
+          setSelectedSalesRepId(match.id);
+          return;
+        }
+      }
+      // If no referral and no rep selected, default to first available
+      if (!selectedSalesRepId && availableReps.length > 0) {
+        setSelectedSalesRepId(availableReps[0].id);
+      }
+    } catch {}
+  }, [availableReps, selectedSalesRepId]);
 
   // Dynamically resolve sales rep details if currentUser only has assigned_sales_rep_id
   const currentAssignedRep = React.useMemo(() => {
@@ -93,10 +110,6 @@ export default function UserAccountModal() {
   const effectiveRepPhone = currentUser?.assigned_sales_rep_phone || currentAssignedRep?.phone;
   const effectiveRepName = currentUser?.assigned_sales_rep_name || currentAssignedRep?.full_name;
 
-  const [changeRepMode, setChangeRepMode] = useState<'auto' | 'custom'>('custom');
-  const [changeRepSelectedId, setChangeRepSelectedId] = useState<string>('');
-  const [changeRepLoading, setChangeRepLoading] = useState(false);
-  const [changeRepMessage, setChangeRepMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
@@ -175,15 +188,13 @@ export default function UserAccountModal() {
     e.preventDefault();
     setRegError('');
     setRegLoading(true);
-    const targetRepId = preferredRepMode === 'custom' && selectedSalesRepId ? selectedSalesRepId : undefined;
+    const targetRepId = selectedSalesRepId || (availableReps.length > 0 ? availableReps[0].id : undefined);
     const result = await registerCustomer(regName, regPhone, regCompany, undefined, targetRepId);
     setRegLoading(false);
     if (result.success) {
       setRegName('');
       setRegPhone('');
       setRegCompany('');
-      setPreferredRepMode('auto');
-      setSelectedSalesRepId('');
       setAccountModalTab('menu');
     } else {
       setRegError(result.message || 'حدث خطأ، يرجى المحاولة مرة أخرى');
@@ -312,26 +323,10 @@ export default function UserAccountModal() {
                   </div>
                   <div className="mt-2 pt-2 border-t border-sky-100 space-y-2 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 font-medium">المندوب المعتمد لخدمتك:</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-[#0099DD]">
-                          {effectiveRepName || 'سيتم التعيين تلقائياً'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsChangingRep(!isChangingRep);
-                            setChangeRepMessage(null);
-                            if (currentUser.assigned_sales_rep_id) {
-                              setChangeRepSelectedId(currentUser.assigned_sales_rep_id);
-                              setChangeRepMode('custom');
-                            }
-                          }}
-                          className="px-2 py-0.5 text-[10px] font-bold bg-[#0099DD]/10 hover:bg-[#0099DD]/20 text-[#0099DD] rounded-md transition cursor-pointer"
-                        >
-                          {isChangingRep ? 'إلغاء' : 'تغيير المندوب'}
-                        </button>
-                      </div>
+                      <span className="text-slate-600 font-medium">المندوب المعتمد لمتابعة متجرك:</span>
+                      <span className="font-bold text-[#0099DD]">
+                        {effectiveRepName || 'إدارة المبيعات'}
+                      </span>
                     </div>
                     {(effectiveRepPhone || currentUser.assigned_sales_rep_id) && (
                       <div className="flex items-center justify-between pt-1">
@@ -354,112 +349,9 @@ export default function UserAccountModal() {
                         </a>
                       </div>
                     )}
-
-                    {/* Changing rep interactive form */}
-                    {isChangingRep && (
-                      <div className="p-3 bg-white border border-sky-200 rounded-xl space-y-2.5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
-                        <div className="text-[11px] font-bold text-slate-800">
-                          اختر طريقة تحديد مندوب المبيعات:
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setChangeRepMode('auto')}
-                            className={`p-2 rounded-lg border text-right transition flex flex-col cursor-pointer ${
-                              changeRepMode === 'auto'
-                                ? 'border-[#0099DD] bg-sky-50 text-[#0099DD] font-bold ring-1 ring-[#0099DD]'
-                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                            }`}
-                          >
-                            <span className="text-[11px]">توزيع عادل تلقائي</span>
-                            <span className="text-[9px] text-slate-400 font-normal">تعيين المندوب الأقل تشغيلاً</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setChangeRepMode('custom');
-                              if (!changeRepSelectedId && availableReps.length > 0) {
-                                setChangeRepSelectedId(availableReps[0].id);
-                              }
-                            }}
-                            className={`p-2 rounded-lg border text-right transition flex flex-col cursor-pointer ${
-                              changeRepMode === 'custom'
-                                ? 'border-[#0099DD] bg-sky-50 text-[#0099DD] font-bold ring-1 ring-[#0099DD]'
-                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                            }`}
-                          >
-                            <span className="text-[11px]">اختيار مندوب محدد</span>
-                            <span className="text-[9px] text-slate-400 font-normal">تحديد المندوب بالاسم</span>
-                          </button>
-                        </div>
-
-                        {changeRepMode === 'custom' && (
-                          <div className="space-y-1">
-                            <label className="block text-[10px] font-bold text-slate-600">
-                              اختر مندوبك المعتمد:
-                            </label>
-                            <select
-                              value={changeRepSelectedId}
-                              onChange={(e) => setChangeRepSelectedId(e.target.value)}
-                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 font-medium focus:outline-none focus:border-[#0099DD] cursor-pointer"
-                            >
-                              {availableReps.map((rep) => (
-                                <option key={rep.id} value={rep.id}>
-                                  {rep.full_name} {rep.phone ? `(${rep.phone})` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
-                        {changeRepMessage && (
-                          <div className={`p-2 rounded-lg text-[11px] font-bold flex items-center gap-1.5 ${
-                            changeRepMessage.type === 'success'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-red-50 text-red-700 border border-red-200'
-                          }`}>
-                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                            <span>{changeRepMessage.text}</span>
-                          </div>
-                        )}
-
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            type="button"
-                            disabled={changeRepLoading}
-                            onClick={async () => {
-                              setChangeRepLoading(true);
-                              setChangeRepMessage(null);
-                              const targetId = changeRepMode === 'custom' ? changeRepSelectedId : undefined;
-                              const res = await customerChangeSalesRep(targetId);
-                              setChangeRepLoading(false);
-                              if (res.success) {
-                                setChangeRepMessage({ type: 'success', text: res.message || 'تم تحديث المندوب بنجاح' });
-                                setTimeout(() => {
-                                  setIsChangingRep(false);
-                                  setChangeRepMessage(null);
-                                }, 1500);
-                              } else {
-                                setChangeRepMessage({ type: 'error', text: res.message || 'حدث خطأ أثناء التحديث' });
-                              }
-                            }}
-                            className="flex-1 bg-[#0099DD] hover:bg-[#007BB3] text-white py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                          >
-                            {changeRepLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
-                            <span>حفظ وتأكيد المندوب</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIsChangingRep(false)}
-                            className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-semibold cursor-pointer"
-                          >
-                            إلغاء
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    <div className="text-[10px] text-slate-400 bg-white/80 p-2 rounded-lg border border-slate-100 mt-1">
+                      🔒 المندوب المسؤول مرتبط بحساب متجرك دائماً للمتابعة الحصرية وتجهيز الطلبيات. لتغيير المندوب يرجى التواصل مع إدارة الشركة.
+                    </div>
                   </div>
                 </div>
               </>
@@ -718,75 +610,45 @@ export default function UserAccountModal() {
 
               {/* Sales Representative Preference */}
               <div className="pt-2 border-t border-slate-100 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-800">
-                    مندوب المبيعات المسؤول
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-normal">اختياري</span>
-                </div>
+                <label className="block text-xs font-bold text-slate-800">
+                  مندوب المبيعات المسؤول عن متجرك *
+                </label>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreferredRepMode('auto');
-                      setSelectedSalesRepId('');
-                    }}
-                    className={`p-2.5 rounded-xl border text-right transition flex flex-col justify-between cursor-pointer ${
-                      preferredRepMode === 'auto'
-                        ? 'border-[#0099DD] bg-sky-50/70 text-[#0099DD] ring-1 ring-[#0099DD]'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
-                    }`}
-                  >
-                    <span className="text-xs font-bold flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${preferredRepMode === 'auto' ? 'bg-[#0099DD]' : 'bg-slate-300'}`} />
-                      بدون مندوب محدد
+                {referredRep ? (
+                  <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl flex items-center justify-between shadow-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-[#0099DD]/10 text-[#0099DD] flex items-center justify-center shrink-0">
+                        <UserCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-bold block">تم التوجيه عبر المندوب المعتمد:</span>
+                        <span className="text-xs font-black text-slate-900">{referredRep.full_name}</span>
+                        {referredRep.phone && (
+                          <span className="text-[10px] text-slate-500 font-mono block" dir="ltr">{referredRep.phone}</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-[#0099DD] text-white px-2 py-0.5 rounded-full font-bold">
+                      ارتباط مباشر
                     </span>
-                    <span className="text-[10px] text-slate-500 mt-1">توزيع عادل وتعيين فوري</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreferredRepMode('custom');
-                      if (!selectedSalesRepId && availableReps.length > 0) {
-                        setSelectedSalesRepId(availableReps[0].id);
-                      }
-                    }}
-                    className={`p-2.5 rounded-xl border text-right transition flex flex-col justify-between cursor-pointer ${
-                      preferredRepMode === 'custom'
-                        ? 'border-[#0099DD] bg-sky-50/70 text-[#0099DD] ring-1 ring-[#0099DD]'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
-                    }`}
-                  >
-                    <span className="text-xs font-bold flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${preferredRepMode === 'custom' ? 'bg-[#0099DD]' : 'bg-slate-300'}`} />
-                      طلب مندوب معين
-                    </span>
-                    <span className="text-[10px] text-slate-500 mt-1">اختيار المندوب بالاسم</span>
-                  </button>
-                </div>
-
-                {preferredRepMode === 'custom' && (
-                  <div className="mt-2 space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <label className="block text-[11px] font-semibold text-slate-600">
-                      قائمة المناديب المعتمدين:
-                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
                     <select
                       value={selectedSalesRepId}
                       onChange={(e) => setSelectedSalesRepId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 font-medium focus:outline-none focus:border-[#0099DD] focus:ring-1 focus:ring-[#0099DD]/30 cursor-pointer"
+                      required
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white text-slate-800 font-semibold focus:outline-none focus:border-[#0099DD] focus:ring-1 focus:ring-[#0099DD]/30 cursor-pointer"
                     >
-                      {availableReps.length === 0 ? (
-                        <option value="">لا يوجد مناديب متاحين حالياً (سيتم التوزيع تلقائياً)</option>
-                      ) : (
-                        availableReps.map((rep) => (
-                          <option key={rep.id} value={rep.id}>
-                            {rep.full_name} {rep.phone ? `(${rep.phone})` : ''}
-                          </option>
-                        ))
-                      )}
+                      {availableReps.map((rep) => (
+                        <option key={rep.id} value={rep.id}>
+                          {rep.full_name} {rep.phone ? `(${rep.phone})` : ''}
+                        </option>
+                      ))}
                     </select>
+                    <p className="text-[10px] text-slate-400">
+                      اختر المندوب الذي قام بزيارة متجرك أو المندوب المسؤول عن منطقتك.
+                    </p>
                   </div>
                 )}
               </div>

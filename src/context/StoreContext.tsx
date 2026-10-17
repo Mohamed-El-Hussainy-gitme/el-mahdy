@@ -6,6 +6,7 @@ import {
   Category,
   CartItem,
   Order,
+  OrderItem,
   UserProfile,
   ShortageRequest,
   MasterModel,
@@ -235,6 +236,11 @@ interface StoreContextType {
     returnReason?: ReturnReason,
     returnNotes?: string
   ) => Promise<void>;
+  updateOrderItems: (
+    orderId: string,
+    items: OrderItem[],
+    editReason?: string
+  ) => Promise<{ success: boolean; message?: string }>;
 
   // Shortages
   shortages: ShortageRequest[];
@@ -360,6 +366,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setStaffMembers(JSON.parse(savedStaffList));
       } else {
         setStaffMembers([DEFAULT_STICKY_SALES_REP]);
+      }
+
+      // Capture and persist sales rep referral link (?rep=... or ?ref=...)
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const refQuery = urlParams.get('rep') || urlParams.get('ref');
+        if (refQuery) {
+          localStorage.setItem('mh_rep_ref', refQuery.trim());
+        }
       }
     } catch (e) {
       console.warn('Storage read warning:', e);
@@ -1987,27 +2002,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    // Check if user selected a preferred sales rep from staff
-    const chosenRep = preferredSalesRepId
-      ? staffMembers.find((s) => s.id === preferredSalesRepId && s.is_active !== false)
+    // Check if user selected a preferred sales rep, or check stored referral parameter
+    let effectiveRepId = preferredSalesRepId;
+    if (!effectiveRepId && typeof window !== 'undefined') {
+      try {
+        const storedRef = localStorage.getItem('mh_rep_ref');
+        if (storedRef) effectiveRepId = storedRef;
+      } catch {}
+    }
+
+    const chosenRep = effectiveRepId
+      ? staffMembers.find(
+          (s) =>
+            (s.id === effectiveRepId || s.phone === effectiveRepId || (s.phone && effectiveRepId.endsWith(s.phone.slice(-9)))) &&
+            s.is_active !== false
+        )
       : null;
 
-    // Auto least-loaded sales rep assignment fallback
-    const leastRep = getLeastLoadedSalesRep();
-    const targetRep = chosenRep || leastRep;
-    const assignmentType = chosenRep ? 'customer_choice' : 'auto_fair_distribution';
+    // Permanent stickiness: assign directly to chosen rep, or fallback to primary sales rep
+    const targetRep =
+      chosenRep ||
+      staffMembers.find((s) => s.role === 'sales_agent' && s.is_active !== false) ||
+      staffMembers.find((s) => s.role === 'admin');
+
+    const assignmentType = chosenRep ? 'customer_choice' : 'admin_transfer';
     const assignmentNotes = chosenRep
-      ? 'طلب العميل هذا المندوب مباشرة عند التسجيل'
-      : 'توزيع تلقائي عادل (المندوب الأقل تشغيلاً)';
+      ? 'ارتباط مباشر ومستمر بالمندوب المعتمد عند التسجيل'
+      : 'تعيين أولي لمتابعة حساب العميل';
 
     if (isSupabaseConfigured()) {
       try {
-        // Use atomic secure registration RPC with optional preferred sales rep
+        // Use atomic secure registration RPC with permanent sales rep
         const { data: rpcRes, error: rpcErr } = await supabase.rpc('sp_customer_register', {
           p_name: cleanName,
           p_phone: cleanPhone,
           p_company: cleanCompany || null,
-          p_sales_rep_id: chosenRep ? chosenRep.id : null,
+          p_sales_rep_id: targetRep ? targetRep.id : null,
         });
 
         if (!rpcErr && rpcRes) {
@@ -2178,93 +2208,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const customerChangeSalesRep = async (
-    preferredSalesRepId?: string,
-    notes?: string
+    _preferredSalesRepId?: string,
+    _notes?: string
   ): Promise<{ success: boolean; message?: string }> => {
-    if (!currentUser) return { success: false, message: 'يرجى تسجيل الدخول أولاً' };
-
-    const chosenRep = preferredSalesRepId
-      ? staffMembers.find((s) => s.id === preferredSalesRepId && s.is_active !== false)
-      : null;
-    const leastRep = getLeastLoadedSalesRep();
-    const targetRep = chosenRep || leastRep || DEFAULT_STICKY_SALES_REP;
-    const assignmentType: AssignmentType = chosenRep ? 'customer_choice' : 'auto_fair_distribution';
-    const finalNotes =
-      notes ||
-      (chosenRep
-        ? 'قام العميل باختيار هذا المندوب بنفسه من حسابه'
-        : 'طلب العميل إعادة التوزيع العادل التلقائي');
-
-    const updatedUser: UserProfile = {
-      ...currentUser,
-      assigned_sales_rep_id: targetRep?.id,
-      assigned_sales_rep_name: targetRep?.full_name,
-      assigned_sales_rep_phone: targetRep?.phone,
-      assignment_type: assignmentType,
+    return {
+      success: false,
+      message: 'المندوب المسؤول مرتبط بحسابك دائماً لضمان المتابعة الحصرية. لتغيير المندوب يرجى مراجعة إدارة الشركة.',
     };
-    setCurrentUser(updatedUser);
-    try {
-      localStorage.setItem('mh_mahdy_user', JSON.stringify(updatedUser));
-    } catch {}
-
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === currentUser.id ? { ...c, ...updatedUser } : c))
-    );
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.customer_id === currentUser.id && o.status === 'pending'
-          ? {
-              ...o,
-              sales_agent_id: targetRep?.id,
-              sales_agent_name: targetRep?.full_name,
-              sales_agent_phone: targetRep?.phone,
-            }
-          : o
-      )
-    );
-
-    const newAssignmentLog: SalesRepAssignment = {
-      id: generateUUID(),
-      customer_id: currentUser.id,
-      customer_name: currentUser.full_name,
-      customer_phone: currentUser.phone,
-      customer_company: currentUser.company_name,
-      sales_rep_id: targetRep?.id,
-      sales_rep_name: targetRep?.full_name,
-      previous_rep_id: currentUser.assigned_sales_rep_id,
-      previous_rep_name: currentUser.assigned_sales_rep_name,
-      assignment_type: assignmentType,
-      notes: finalNotes,
-      created_at: new Date().toISOString(),
-    };
-    setSalesRepAssignments((prev) => [newAssignmentLog, ...prev]);
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data: rpcRes } = await supabase.rpc('sp_customer_choose_sales_rep', {
-          p_customer_id: currentUser.id,
-          p_sales_rep_id: chosenRep ? chosenRep.id : null,
-          p_notes: finalNotes,
-        });
-
-        if (rpcRes && rpcRes.success) {
-          const finalUser: UserProfile = {
-            ...updatedUser,
-            assigned_sales_rep_id: rpcRes.sales_rep_id || updatedUser.assigned_sales_rep_id,
-            assigned_sales_rep_name: rpcRes.sales_rep_name || updatedUser.assigned_sales_rep_name,
-            assigned_sales_rep_phone: rpcRes.sales_rep_phone || updatedUser.assigned_sales_rep_phone,
-          };
-          setCurrentUser(finalUser);
-          try { localStorage.setItem('mh_mahdy_user', JSON.stringify(finalUser)); } catch {}
-        }
-      } catch (e) {
-        console.warn('sp_customer_choose_sales_rep error:', e);
-      }
-      await refreshData();
-    }
-    return { success: true, message: 'تم تحديث مندوبك المعتمد بنجاح' };
   };
-
 
   const logout = () => {
     setCurrentUser(null);
@@ -2285,6 +2236,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const seq = Math.floor(10000 + Math.random() * 90000);
     const orderNumber = `ORD-${dateStr}-${seq}`;
 
+    const resolvedItems = cart.map((ci) => {
+      const currentProd = products.find((p) => p.id === ci.product.id) || ci.product;
+      const effectivePrice = Number(ci.unit_price) > 0 ? Number(ci.unit_price) : (Number(currentProd.price) > 0 ? Number(currentProd.price) : 0);
+      return {
+        id: generateUUID(),
+        order_id: orderId,
+        product_id: ci.product.id,
+        product_title: ci.product.title_ar,
+        product_sku: ci.product.sku,
+        model_id: ci.model?.id,
+        model_name: ci.model?.model_name,
+        quantity: ci.quantity,
+        unit_price: effectivePrice,
+        subtotal: effectivePrice * ci.quantity,
+      };
+    });
+
+    const calculatedTotal = resolvedItems.reduce((acc, it) => acc + it.subtotal, 0);
+
     const newOrder: Order = {
       id: orderId,
       order_number: orderNumber,
@@ -2296,21 +2266,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       sales_agent_name: currentUser.assigned_sales_rep_name,
       sales_agent_phone: currentUser.assigned_sales_rep_phone,
       status: 'pending',
-      total_amount: cartTotal,
+      total_amount: calculatedTotal > 0 ? calculatedTotal : cartTotal,
       shipping_address: shippingAddress,
       notes: notes,
-      items: cart.map((ci) => ({
-        id: generateUUID(),
-        order_id: orderId,
-        product_id: ci.product.id,
-        product_title: ci.product.title_ar,
-        product_sku: ci.product.sku,
-        model_id: ci.model?.id,
-        model_name: ci.model?.model_name,
-        quantity: ci.quantity,
-        unit_price: ci.unit_price,
-        subtotal: ci.unit_price * ci.quantity,
-      })),
+      items: resolvedItems,
       created_at: new Date().toISOString(),
     };
 
@@ -2565,6 +2524,55 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Edit Order Items & Recalculate Total (Sales Rep / Admin)
+  const updateOrderItems = async (
+    orderId: string,
+    items: OrderItem[],
+    editReason?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(staffSession?.id ? { 'x-staff-id': staffSession.id } : {}),
+        },
+        body: JSON.stringify({
+          orderId,
+          items,
+          editReason,
+          staffId: staffSession?.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, message: data.error || 'فشل تحديث الطلبية' };
+      }
+
+      // Update local state
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id !== orderId) return o;
+          return {
+            ...o,
+            total_amount: data.total_amount,
+            items: items.map((it) => ({
+              ...it,
+              subtotal: it.quantity * it.unit_price,
+            })),
+          };
+        })
+      );
+
+      await refreshData();
+      return { success: true, message: 'تم تحديث الفاتورة وإعادة حساب الإجمالي بنجاح' };
+    } catch (err: any) {
+      console.error('updateOrderItems error:', err);
+      return { success: false, message: err?.message || 'حدث خطأ أثناء الاتصال بالخادم' };
+    }
+  };
+
   // Reassign / Assign Sticky Sales Rep directly (CRM — Admin only action, with Data Log recording)
   const assignCustomerSalesRep = async (
     customerId: string,
@@ -2697,9 +2705,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const chosenRep = data.sales_rep_id
       ? staffMembers.find((s) => s.id === data.sales_rep_id && s.is_active !== false)
       : null;
-    const leastRep = getLeastLoadedSalesRep();
-    const targetRep = chosenRep || leastRep || DEFAULT_STICKY_SALES_REP;
-    const assignmentType: AssignmentType = chosenRep ? 'admin_transfer' : 'auto_fair_distribution';
+    const targetRep =
+      chosenRep ||
+      (staffSession?.role === 'sales_agent' ? staffSession : null) ||
+      staffMembers.find((s) => s.role === 'sales_agent' && s.is_active !== false) ||
+      DEFAULT_STICKY_SALES_REP;
+    const assignmentType: AssignmentType = 'admin_transfer';
 
     const newCustId = generateUUID();
     const newCustomer: UserProfile = {
@@ -3348,6 +3359,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         placePendingOrder,
         cancelCustomerOrder,
         updateOrderStatus,
+        updateOrderItems,
 
         shortages,
         submitShortage,

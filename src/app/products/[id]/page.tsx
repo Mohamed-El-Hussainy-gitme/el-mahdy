@@ -3,6 +3,7 @@
 import React, { use, useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import Navbar from '@/components/Navbar';
 import ProductCard from '@/components/ProductCard';
 import CompatibilityModal from '@/components/CompatibilityModal';
@@ -172,7 +173,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           {/* Image Gallery */}
           <div className="w-full md:w-5/12 space-y-3">
             <div className="relative w-full aspect-square bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden flex items-center justify-center">
-              <Image src={mainImage} alt={product.title_ar} fill priority className="object-contain p-4" sizes="(max-width: 768px) 100vw, 40vw" />
+              <SafeProductImage src={mainImage} alt={product.title_ar} fill priority className="object-contain p-4" sizes="(max-width: 768px) 100vw, 40vw" />
               <div className="absolute top-4 left-4 flex flex-col gap-2">
                 <button onClick={() => toggleWishlist(product.id)} className={`p-2 rounded-full backdrop-blur-md shadow-sm ${isWishlisted ? 'bg-red-50 text-red-500' : 'bg-white/80 text-slate-500 hover:text-red-500 hover:bg-white'}`}>
                   <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-current' : ''}`} />
@@ -182,11 +183,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 </button>
               </div>
             </div>
+
             {allImages.length > 1 && (
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
                 {allImages.map((img, idx) => (
                   <button key={idx} onClick={() => setSelectedImage(img)} className={`relative w-16 h-16 rounded-xl border-2 overflow-hidden shrink-0 transition ${mainImage === img ? 'border-[#0099DD] shadow-sm' : 'border-slate-200 hover:border-[#0099DD]/50'}`}>
-                    <Image src={img} alt="" fill className="object-cover" sizes="64px" loading="lazy" />
+                    <SafeProductImage src={img} alt="" fill className="object-cover" sizes="64px" loading="lazy" />
                   </button>
                 ))}
                 <span className="text-xs font-bold text-slate-400 mr-2">{allImages.length} صور</span>

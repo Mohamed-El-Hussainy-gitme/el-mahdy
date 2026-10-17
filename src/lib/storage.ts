@@ -72,38 +72,64 @@ async function compressImage(file: File, maxPx = 1000, quality = 0.78): Promise<
 
 /**
  * Uploads an image file to Supabase Storage bucket ('product-images').
- * Automatically compresses large images client-side before uploading.
- * Returns the public URL of the uploaded image.
+ * Routes through the server API (/api/admin/upload) with Service Role & Sharp optimization
+ * to completely eliminate client-side RLS permission issues.
  */
 export async function uploadImage(file: File, folder: string = 'general'): Promise<{ url: string | null; error: string | null }> {
   if (!isSupabaseConfigured()) {
-    // If Supabase is not configured, create a local object URL for preview
     return { url: URL.createObjectURL(file), error: null };
   }
 
   try {
-    // ── Step 1: Compress before upload ──────────────────────────────────────
-    const fileToUpload = await compressImage(file);
+    // ── Step 1: Compress client-side first for fast transfer ────────────────
+    const compressedFile = await compressImage(file);
 
-    const fileExt = fileToUpload.name.split('.').pop() || 'jpg';
+    // ── Step 2: Upload via Server API (Service Role) ────────────────────────
+    const formData = new FormData();
+    formData.append('file', compressedFile);
+    formData.append('folder', folder);
+
+    // Attach staff session header if available in localStorage
+    const headers: Record<string, string> = {};
+    try {
+      const stored = localStorage.getItem('mh_mahdy_staff');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.id) headers['x-staff-id'] = parsed.id;
+      }
+    } catch {}
+
+    const res = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success && data.url) {
+      return { url: data.url, error: null };
+    }
+
+    // If server upload failed, fallback to client-side direct upload attempt
+    console.warn('Server upload failed, falling back to direct upload:', data.error);
+    const fileExt = compressedFile.name.split('.').pop() || 'jpg';
     const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from('product-images')
-      .upload(fileName, fileToUpload, {
-        cacheControl: '31536000', // 1 year cache for static product images
-        upsert: false,
+      .upload(fileName, compressedFile, {
+        cacheControl: '31536000',
+        upsert: true,
       });
 
     if (uploadError) {
-      console.warn('Storage upload error:', uploadError.message);
-      return { url: null, error: uploadError.message };
+      return { url: null, error: data.error || uploadError.message };
     }
 
-    const { data } = supabase.storage.from('product-images').getPublicUrl(fileName);
-    return { url: data.publicUrl, error: null };
+    const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(fileName);
+    return { url: urlData.publicUrl, error: null };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown upload error';
+    const message = err instanceof Error ? err.message : 'حدث خطأ أثناء رفع الصورة';
     return { url: null, error: message };
   }
 }
@@ -114,3 +140,4 @@ export async function uploadImage(file: File, folder: string = 'general'): Promi
 export async function uploadProductImage(file: File, folder: string = 'products'): Promise<{ url: string | null; error: string | null }> {
   return uploadImage(file, folder);
 }
+

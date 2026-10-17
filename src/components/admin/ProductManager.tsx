@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import {
   Package,
   Plus,
@@ -386,8 +387,8 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                       <td className="p-3.5">
                         <div className="flex items-center gap-3">
                           <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                            <Image
-                              src={p.image_url || '/logo.png'}
+                            <SafeProductImage
+                              src={p.image_url}
                               alt={p.title_ar}
                               fill
                               className="object-contain p-1"
@@ -572,8 +573,8 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                 {/* Product Image */}
                 <div className="relative p-3">
                   <div className="relative w-full h-48 rounded-xl overflow-hidden bg-slate-50 border border-slate-100">
-                    <Image
-                      src={previewProduct.image_url || '/placeholder.svg'}
+                    <SafeProductImage
+                      src={previewProduct.image_url}
                       alt={previewProduct.title_ar}
                       fill
                       className="object-cover"
@@ -656,7 +657,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {previewProduct.gallery_urls.map((url, idx) => (
                       <div key={idx} className="relative w-14 h-14 shrink-0 rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-                        <Image
+                        <SafeProductImage
                           src={url}
                           alt={`gallery-${idx + 1}`}
                           fill
@@ -722,9 +723,10 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                   <input
                     type="number"
                     step="0.01"
-                    min="0"
-                    value={price}
+                    min="0.01"
+                    value={price || ''}
                     onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#0099DD] font-bold text-[#0099DD]"
                     required
                   />
@@ -776,7 +778,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({
                 {imageUrl ? (
                   <div className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200 mb-2">
                     <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-300 bg-white shrink-0 shadow-sm">
-                      <Image src={imageUrl} alt="معاينة" fill className="object-contain p-1" />
+                      <SafeProductImage src={imageUrl} alt="معاينة" fill className="object-contain p-1" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-mono text-slate-500 truncate" dir="ltr">{imageUrl}</p>

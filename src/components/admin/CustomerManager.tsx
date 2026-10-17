@@ -29,6 +29,7 @@ import {
   Power,
   Eye,
   AlertTriangle,
+  Share2,
 } from 'lucide-react';
 import { useStore, DEFAULT_STICKY_SALES_REP } from '@/context/StoreContext';
 import { buildWhatsAppUrl } from '@/utils/phoneUtils';
@@ -299,6 +300,19 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
     }
   };
 
+  // Referral Link Handler
+  const [copiedReferral, setCopiedReferral] = useState(false);
+  const handleCopyReferralLink = () => {
+    if (typeof window === 'undefined') return;
+    const refCode = staffSession?.phone || staffSession?.id;
+    if (!refCode) return;
+    const link = `${window.location.origin}/?rep=${encodeURIComponent(refCode)}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopiedReferral(true);
+      setTimeout(() => setCopiedReferral(false), 2500);
+    });
+  };
+
   // Add Customer Handlers
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -308,11 +322,12 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
     }
     setAddLoading(true);
     setAddFeedback(null);
+    const resolvedRepId = isSalesAgent && staffSession ? staffSession.id : (addRepId || undefined);
     const res = await adminCreateCustomer({
       full_name: addName.trim(),
       phone: addPhone.trim(),
       company_name: addCompany.trim() || undefined,
-      sales_rep_id: addRepId || undefined,
+      sales_rep_id: resolvedRepId,
       notes: addNotes.trim() || undefined,
     });
     setAddLoading(false);
@@ -458,7 +473,24 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
               <span>{isRefreshing ? 'جاري التحديث...' : 'تحديث السجل'}</span>
             </button>
 
-            {isAdmin && (
+            {/* Copy My Referral Link Button (for Sales Agents and Admins) */}
+            {staffSession && (
+              <button
+                onClick={handleCopyReferralLink}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
+                  copiedReferral
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-xs'
+                }`}
+                title="نسخ رابط التسجيل الخاص بك لإرساله للمحلات على واتساب"
+              >
+                {copiedReferral ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4 text-[#0099DD]" />}
+                <span>{copiedReferral ? 'تم نسخ الرابط!' : 'نسخ رابط الإحالة الخاص بي'}</span>
+              </button>
+            )}
+
+            {/* Add Customer Button (Available to Admin & Sales Agent) */}
+            {(isAdmin || isSalesAgent) && (
               <button
                 onClick={() => {
                   setIsAddModalOpen(true);
@@ -466,7 +498,7 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
                   setAddName('');
                   setAddPhone('');
                   setAddCompany('');
-                  setAddRepId(salesAgents[0]?.id || '');
+                  setAddRepId(isSalesAgent && staffSession ? staffSession.id : (salesAgents[0]?.id || ''));
                   setAddNotes('');
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0099DD] hover:bg-[#007BB3] text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"
@@ -1486,22 +1518,34 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">المندوب المسؤول</label>
-                <select
-                  value={addRepId}
-                  onChange={(e) => setAddRepId(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20 cursor-pointer"
-                >
-                  <option value="">توزيع عادل تلقائي (أقل تشغيلاً)</option>
-                  {salesAgents.map((sa) => (
-                    <option key={sa.id} value={sa.id}>
-                      {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل)
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  إذا تركته فارغاً سيُعيَّن تلقائيًا للمندوب الأقل عملاء (توزيع عادل).
-                </p>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">المندوب المسؤول *</label>
+                {isSalesAgent && staffSession ? (
+                  <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-black text-[#0099DD] block">{staffSession.full_name} (أنت)</span>
+                      <span className="text-[10px] text-slate-500 font-bold">ارتباط حصري ودائم للعميل بحسابك</span>
+                    </div>
+                    <UserCheck className="w-4 h-4 text-[#0099DD]" />
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={addRepId}
+                      onChange={(e) => setAddRepId(e.target.value)}
+                      required
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white font-semibold focus:outline-none focus:border-[#0099DD] focus:ring-2 focus:ring-[#0099DD]/20 cursor-pointer"
+                    >
+                      {salesAgents.map((sa) => (
+                        <option key={sa.id} value={sa.id}>
+                          {sa.full_name} ({repCustomerCounts[sa.id] || 0} عميل)
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      يتم ربط العميل بالمندوب المحدد بشكل دائم ولا يتغير إلا بقرار إداري.
+                    </p>
+                  </>
+                )}
               </div>
 
               <div>

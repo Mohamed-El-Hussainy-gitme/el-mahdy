@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { SafeProductImage } from '@/components/SafeProductImage';
 import {
   Heart,
   Share2,
@@ -114,8 +115,8 @@ function ProductCard({ product, priority = false }: ProductCardProps) {
           href={`/products/${product.id}`}
           className="relative w-full h-44 my-1 rounded-xl overflow-hidden bg-slate-50 flex items-center justify-center block"
         >
-          <Image
-            src={product.image_url || '/placeholder.svg'}
+          <SafeProductImage
+            src={product.image_url}
             alt={product.title_ar}
             fill
             priority={priority}
