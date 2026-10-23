@@ -156,7 +156,7 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
         map[o.customer_id] = { orderCount: 0, totalSpent: 0 };
       }
       map[o.customer_id].orderCount += 1;
-      if (o.status !== 'returned') {
+      if (o.status === 'delivered') {
         map[o.customer_id].totalSpent += Number(o.total_amount) || 0;
       }
       if (!map[o.customer_id].lastOrderDate || o.created_at > map[o.customer_id].lastOrderDate!) {
@@ -1840,7 +1840,7 @@ export function CustomerManager({ currentRole, staffProfile, customRoles: _custo
       {/* ════════════════════════════════════════════════════════════════════════ */}
       {viewingCustomer && (() => {
         const custOrders = orders.filter((o) => o.customer_id === viewingCustomer.id);
-        const totalSpent = custOrders.filter((o) => o.status !== 'returned').reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+        const totalSpent = custOrders.filter((o) => o.status === 'delivered').reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
         const custRep = viewingCustomer.assigned_sales_rep_id
           ? salesAgents.find((sa) => sa.id === viewingCustomer.assigned_sales_rep_id)
           : null;

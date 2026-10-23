@@ -215,7 +215,7 @@ export default function AccountPage() {
   const totalSpent = useMemo(
     () =>
       myOrders
-        .filter((o) => o.status !== 'returned')
+        .filter((o) => o.status === 'delivered')
         .reduce((sum, o) => sum + Number(o.total_amount), 0),
     [myOrders]
   );

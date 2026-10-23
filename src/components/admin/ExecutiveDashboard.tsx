@@ -30,16 +30,23 @@ export function ExecutiveDashboard() {
       ? orders.filter((o) => !o.sales_agent_id || o.sales_agent_id === staffSession.id)
       : orders;
 
-    const myDeliveredOrders = accessibleOrders.filter((o) => o.status === 'delivered');
-    const totalRevenue = accessibleOrders
-      .filter((o) => o.status !== 'returned')
-      .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
-
     const pendingOrders = accessibleOrders.filter((o) => o.status === 'pending');
     const prepOrders = accessibleOrders.filter((o) => o.status === 'preparation');
     const shippingOrders = accessibleOrders.filter((o) => o.status === 'shipping');
-    const deliveredOrders = myDeliveredOrders;
+    const deliveredOrders = accessibleOrders.filter((o) => o.status === 'delivered');
     const returnedOrders = accessibleOrders.filter((o) => o.status === 'returned');
+
+    // ONLY delivered orders represent realized/completed sales (العمليات المكتملة فقط)
+    const totalRevenue = deliveredOrders
+      .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+
+    // In-transit / preparation pipeline revenue (قيد التجهيز والشحن)
+    const inProgressRevenue = [...prepOrders, ...shippingOrders]
+      .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+
+    // Pending review orders total value (قيد المراجعة)
+    const pendingRevenue = pendingOrders
+      .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
 
     // Orders pending > 48 hours
     const now = Date.now();
@@ -74,6 +81,8 @@ export function ExecutiveDashboard() {
 
     return {
       totalRevenue,
+      inProgressRevenue,
+      pendingRevenue,
       totalOrders: accessibleOrders.length,
       pendingCount: pendingOrders.length,
       prepCount: prepOrders.length,
@@ -89,11 +98,11 @@ export function ExecutiveDashboard() {
     };
   }, [orders, products, customers, shortages, isSalesAgent, staffSession]);
 
-  // Top ordered models calculation
+  // Top ordered models calculation (Based strictly on completed delivered orders)
   const topModels = useMemo(() => {
     const counts: Record<string, { brand: string; modelName: string; quantity: number; revenue: number }> = {};
     orders.forEach((o) => {
-      if (o.status === 'returned') return;
+      if (o.status !== 'delivered') return;
       o.items.forEach((item) => {
         if (item.model_name) {
           const key = item.model_name;
@@ -161,16 +170,37 @@ export function ExecutiveDashboard() {
           </p>
         </div>
 
-        <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 text-left md:text-right">
-          <span className="text-[11px] text-slate-300 block">
-            {isSalesAgent ? 'إجمالي مبيعات طلباتك المحققة' : 'إجمالي مبيعات المتجر المحققة'}
+        <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 text-left md:text-right min-w-[280px]">
+          <span className="text-xs text-slate-300 block font-semibold mb-1">
+            {isSalesAgent ? 'إجمالي مبيعاتك المحققة (تم التسليم)' : 'إجمالي المبيعات المحققة (تم التسليم)'}
           </span>
-          <span className="text-2xl font-black text-sky-400 font-mono">
+          <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight block">
             {stats.totalRevenue.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
           </span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">
-            {isSalesAgent ? 'للطلبات المسندة إليك' : 'بدون الطلبات المرتجعة'}
+          <span className="text-[11px] text-emerald-300 font-bold block mt-1">
+            ✔ {stats.deliveredCount} طلب مسلّم ومكتمل بنجاح
           </span>
+
+          {(stats.inProgressRevenue > 0 || stats.pendingRevenue > 0) && (
+            <div className="mt-3 pt-2.5 border-t border-white/15 space-y-1 text-[11px]">
+              {stats.inProgressRevenue > 0 && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-300">جاري التجهيز والشحن:</span>
+                  <span className="font-bold text-sky-300 font-mono">
+                    {stats.inProgressRevenue.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+                  </span>
+                </div>
+              )}
+              {stats.pendingRevenue > 0 && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-300">قيد المراجعة:</span>
+                  <span className="font-bold text-amber-300 font-mono">
+                    {stats.pendingRevenue.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

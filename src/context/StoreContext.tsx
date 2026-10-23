@@ -3141,9 +3141,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const deliveredOrders = repOrders.filter((o) => o.status === 'delivered').length;
       const returnedOrders = repOrders.filter((o) => o.status === 'returned').length;
       const totalRevenue = repOrders
-        .filter((o) => o.status !== 'returned')
+        .filter((o) => o.status === 'delivered')
         .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
-      const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+      const averageOrderValue = deliveredOrders > 0 ? totalRevenue / deliveredOrders : 0;
       const conversionRate = totalOrders > 0 ? (deliveredOrders / totalOrders) * 100 : 0;
       const loadSharePercentage = (totalCustCount / totalAssignedCustomersAll) * 100;
 
