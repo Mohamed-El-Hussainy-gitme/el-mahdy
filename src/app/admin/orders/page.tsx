@@ -12,6 +12,8 @@ export default function AdminOrdersPage() {
     masterModels,
     updateOrderStatus,
     updateOrderItems,
+    addOrderDeposit,
+    deleteOrder,
     assignCustomerSalesRep,
   } = useStore();
 
@@ -25,6 +27,8 @@ export default function AdminOrdersPage() {
       masterModels={masterModels}
       onUpdateOrderStatus={updateOrderStatus}
       onUpdateOrderItems={updateOrderItems}
+      onAddOrderDeposit={addOrderDeposit}
+      onDeleteOrder={deleteOrder}
       onAssignSalesRep={assignCustomerSalesRep}
     />
   );

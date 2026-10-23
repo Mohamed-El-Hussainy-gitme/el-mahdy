@@ -234,6 +234,17 @@ export function printDeliveryInvoice(order: Order): void {
             <span>إجمالي الفاتورة:</span>
             <span>${order.total_amount.toFixed(2)} ج.م</span>
           </div>
+          ${(order.deposit_amount && order.deposit_amount > 0) ? `
+          <div class="total-row" style="color: #16a34a; margin-top: 6px;">
+            <span>✔ دفعة مقدمة (عربون):</span>
+            <strong style="color: #16a34a;">- ${Number(order.deposit_amount).toFixed(2)} ج.م</strong>
+          </div>
+          ${order.deposit_notes ? `<div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">ملاحظة الدفعة: ${order.deposit_notes}</div>` : ''}
+          <div class="total-row grand-total" style="font-size: 18px; color: #dc2626; border-top: 2px solid #dc2626; padding-top: 8px; margin-top: 4px;">
+            <span>💰 المتبقي للتحصيل:</span>
+            <span>${(order.total_amount - Number(order.deposit_amount)).toFixed(2)} ج.م</span>
+          </div>
+          ` : ''}
         </div>
       </div>
 

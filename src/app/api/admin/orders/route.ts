@@ -145,3 +145,85 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const orderId = searchParams.get('orderId');
+    const staffId = req.headers.get('x-staff-id') || null;
+
+    if (!orderId) {
+      return NextResponse.json({ success: false, error: 'معرف الطلبية مطلوب' }, { status: 400 });
+    }
+
+    // Must be admin
+    if (!staffId) {
+      return NextResponse.json({ success: false, error: 'صلاحية المدير العام مطلوبة لحذف الطلبيات' }, { status: 403 });
+    }
+
+    const { data: staff } = await supabaseAdmin
+      .from('user_profiles')
+      .select('role')
+      .eq('id', staffId)
+      .maybeSingle();
+
+    if (!staff || staff.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'صلاحية المدير العام مطلوبة لحذف الطلبيات' }, { status: 403 });
+    }
+
+    // Fetch order to validate status
+    const { data: order, error: orderErr } = await supabaseAdmin
+      .from('orders')
+      .select('id, order_number, status, total_amount')
+      .eq('id', orderId)
+      .maybeSingle();
+
+    if (orderErr || !order) {
+      return NextResponse.json({ success: false, error: 'لم يتم العثور على الطلبية' }, { status: 404 });
+    }
+
+    // Only allow deleting pending or returned orders
+    const deletableStatuses = ['pending', 'returned'];
+    if (!deletableStatuses.includes(order.status)) {
+      return NextResponse.json(
+        { success: false, error: 'يمكن حذف الطلبيات المعلقة أو المرتجعة فقط. الطلبيات قيد التجهيز أو الشحن أو المسلمة لا يمكن حذفها.' },
+        { status: 400 }
+      );
+    }
+
+    // Delete order_items first (cascade may handle it, but be safe)
+    await supabaseAdmin.from('order_items').delete().eq('order_id', orderId);
+
+    // Delete the order
+    const { error: delErr } = await supabaseAdmin.from('orders').delete().eq('id', orderId);
+    if (delErr) {
+      console.error('Delete order error:', delErr);
+      return NextResponse.json({ success: false, error: delErr.message }, { status: 500 });
+    }
+
+    // Audit log
+    try {
+      await supabaseAdmin.from('audit_logs').insert({
+        action: 'order_deleted',
+        actor_id: staffId,
+        metadata: {
+          order_id: orderId,
+          order_number: order.order_number,
+          status: order.status,
+          total_amount: order.total_amount,
+        },
+        severity: 'warning',
+      });
+    } catch (auditErr) {
+      console.warn('Audit log write error:', auditErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `تم حذف الطلبية ${order.order_number} بنجاح`,
+    });
+  } catch (err: any) {
+    console.error('Order DELETE error:', err);
+    return NextResponse.json({ success: false, error: err?.message || 'حدث خطأ في الخادم' }, { status: 500 });
+  }
+}

@@ -20,6 +20,8 @@ import {
   FileText,
   X,
   Edit3,
+  Banknote,
+  Trash2,
 } from 'lucide-react';
 import { Order, OrderStatus, UserProfile, UserRole, ReturnReason, Product, MasterModel, OrderItem } from '@/types';
 import { canTransitionOrder, getOrderStatusBadge, filterOrdersForRole } from '@/services/orderService';
@@ -45,6 +47,14 @@ interface OrdersManagerProps {
     items: OrderItem[],
     editReason?: string
   ) => Promise<{ success: boolean; message?: string }>;
+  onAddOrderDeposit?: (
+    orderId: string,
+    amount: number,
+    notes?: string
+  ) => Promise<{ success: boolean; message?: string }>;
+  onDeleteOrder?: (
+    orderId: string
+  ) => Promise<{ success: boolean; message?: string }>;
   onAssignSalesRep?: (customerId: string, salesRepId: string) => void | Promise<any>;
 }
 
@@ -55,6 +65,8 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
   masterModels = [],
   onUpdateOrderStatus,
   onUpdateOrderItems,
+  onAddOrderDeposit,
+  onDeleteOrder,
   onAssignSalesRep,
 }) => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -72,6 +84,17 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
   const [returnModalOrder, setReturnModalOrder] = useState<Order | null>(null);
   const [returnReasonInput, setReturnReasonInput] = useState<ReturnReason>('customer_refused');
   const [returnNotesInput, setReturnNotesInput] = useState('');
+
+  // Deposit Modal State
+  const [depositModalOrder, setDepositModalOrder] = useState<Order | null>(null);
+  const [depositAmountInput, setDepositAmountInput] = useState('');
+  const [depositNotesInput, setDepositNotesInput] = useState('');
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositError, setDepositError] = useState('');
+
+  // Delete Confirmation State
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<Order | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Filter orders according to RBAC role
   const roleAccessibleOrders = useMemo(() => {
@@ -526,6 +549,37 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
                           </button>
                         )}
 
+                        {/* Deposit / Advance Payment Button — Sales Rep & Admin */}
+                        {onAddOrderDeposit && !['delivered'].includes(order.status) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDepositModalOrder(order);
+                              setDepositAmountInput(order.deposit_amount ? String(order.deposit_amount) : '');
+                              setDepositNotesInput(order.deposit_notes || '');
+                              setDepositError('');
+                            }}
+                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer"
+                            title="تسجيل دفعة مقدمة / عربون على هذا الطلب"
+                          >
+                            <Banknote className="w-3.5 h-3.5" />
+                            <span>{(order.deposit_amount && order.deposit_amount > 0) ? `عربون: ${Number(order.deposit_amount).toFixed(0)} ج.م` : 'دفعة مقدمة'}</span>
+                          </button>
+                        )}
+
+                        {/* Admin-only Delete Order Button — pending or returned only */}
+                        {onDeleteOrder && staffSession.role === 'admin' && ['pending', 'returned'].includes(order.status) && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmOrder(order)}
+                            className="flex items-center gap-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300 px-3 py-2 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer"
+                            title="حذف هذه الطلبية نهائياً (للأدمن فقط)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        )}
+
                         <input
                           type="text"
                           placeholder="ملاحظات تتبع الشحنة..."
@@ -733,6 +787,152 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
             return res;
           }}
         />
+      )}
+
+      {/* Deposit / Advance Payment Modal */}
+      {depositModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2 text-emerald-700">
+                <Banknote className="w-4 h-4" />
+                <span>تسجيل دفعة مقدمة — {depositModalOrder.order_number}</span>
+              </h3>
+              <button onClick={() => setDepositModalOrder(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Current deposit info */}
+            {depositModalOrder.deposit_amount && depositModalOrder.deposit_amount > 0 && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800 flex items-center gap-2">
+                <Banknote className="w-4 h-4 shrink-0" />
+                <span>الدفعة الحالية المسجلة: <strong>{Number(depositModalOrder.deposit_amount).toFixed(2)} ج.م</strong></span>
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  مبلغ الدفعة المقدمة / العربون (ج.م) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  max={depositModalOrder.total_amount}
+                  placeholder={`أقصى مبلغ: ${depositModalOrder.total_amount.toFixed(2)} ج.م`}
+                  value={depositAmountInput}
+                  onChange={(e) => { setDepositAmountInput(e.target.value); setDepositError(''); }}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-mono text-sm"
+                />
+                <p className="text-slate-400 mt-1">إجمالي الفاتورة: <strong className="text-[#0099DD]">{depositModalOrder.total_amount.toFixed(2)} ج.م</strong>
+                  {depositAmountInput && parseFloat(depositAmountInput) > 0 && (
+                    <span className="mr-2 text-rose-600">| المتبقي: <strong>{(depositModalOrder.total_amount - parseFloat(depositAmountInput)).toFixed(2)} ج.م</strong></span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">ملاحظات الدفعة (اختياري)</label>
+                <input
+                  type="text"
+                  placeholder="مثال: عربون تحويل بنكي، دفعة نقدية..."
+                  value={depositNotesInput}
+                  onChange={(e) => setDepositNotesInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              {depositError && (
+                <p className="text-rose-600 text-xs font-bold bg-rose-50 border border-rose-200 rounded-lg p-2">{depositError}</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setDepositModalOrder(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={depositLoading}
+                onClick={async () => {
+                  const amount = parseFloat(depositAmountInput);
+                  if (!depositAmountInput || isNaN(amount) || amount <= 0) {
+                    setDepositError('يرجى إدخال مبلغ صحيح أكبر من الصفر');
+                    return;
+                  }
+                  if (amount > depositModalOrder.total_amount) {
+                    setDepositError(`المبلغ يتجاوز إجمالي الفاتورة (${depositModalOrder.total_amount.toFixed(2)} ج.م)`);
+                    return;
+                  }
+                  setDepositLoading(true);
+                  const res = await onAddOrderDeposit!(depositModalOrder.id, amount, depositNotesInput.trim() || undefined);
+                  setDepositLoading(false);
+                  if (res.success) {
+                    setDepositModalOrder(null);
+                  } else {
+                    setDepositError(res.message || 'فشل تسجيل الدفعة');
+                  }
+                }}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md disabled:opacity-60"
+              >
+                {depositLoading ? 'جاري التسجيل...' : 'تأكيد الدفعة المقدمة'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Delete Order Confirmation Modal */}
+      {deleteConfirmOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">تأكيد الحذف النهائي</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{deleteConfirmOrder.order_number}</p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-1">
+              <p className="font-bold">⚠️ هذا الإجراء لا يمكن التراجع عنه!</p>
+              <p>سيتم حذف الطلبية <strong>{deleteConfirmOrder.order_number}</strong> للعميل <strong>{deleteConfirmOrder.customer_name}</strong> بإجمالي <strong>{deleteConfirmOrder.total_amount.toFixed(2)} ج.م</strong> نهائياً من النظام.</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOrder(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={async () => {
+                  setDeleteLoading(true);
+                  const res = await onDeleteOrder!(deleteConfirmOrder.id);
+                  setDeleteLoading(false);
+                  if (res.success) {
+                    setDeleteConfirmOrder(null);
+                  } else {
+                    alert(res.message || 'فشل حذف الطلبية');
+                  }
+                }}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md disabled:opacity-60"
+              >
+                {deleteLoading ? 'جاري الحذف...' : 'تأكيد الحذف النهائي'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

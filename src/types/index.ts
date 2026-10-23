@@ -124,6 +124,10 @@ export interface Order {
   shipped_at?: string;
   delivered_at?: string;
   returned_at?: string;
+  // Deposit / advance payment
+  deposit_amount?: number;
+  deposit_notes?: string;
+  deposit_recorded_at?: string;
 }
 
 export type AssignmentType = 'auto_fair_distribution' | 'customer_choice' | 'admin_transfer';

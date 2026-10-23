@@ -241,6 +241,14 @@ interface StoreContextType {
     items: OrderItem[],
     editReason?: string
   ) => Promise<{ success: boolean; message?: string }>;
+  addOrderDeposit: (
+    orderId: string,
+    amount: number,
+    notes?: string
+  ) => Promise<{ success: boolean; message?: string }>;
+  deleteOrder: (
+    orderId: string
+  ) => Promise<{ success: boolean; message?: string }>;
 
   // Shortages
   shortages: ShortageRequest[];
@@ -2573,6 +2581,61 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const addOrderDeposit = async (
+    orderId: string,
+    amount: number,
+    notes?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/admin/orders/deposit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(staffSession?.id ? { 'x-staff-id': staffSession.id } : {}),
+        },
+        body: JSON.stringify({ orderId, amount, notes, staffId: staffSession?.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, message: data.error || 'فشل تسجيل الدفعة' };
+      }
+      // Update local state
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id !== orderId
+            ? o
+            : { ...o, deposit_amount: data.deposit_amount, deposit_notes: data.deposit_notes, deposit_recorded_at: data.deposit_recorded_at }
+        )
+      );
+      return { success: true, message: 'تم تسجيل الدفعة المقدمة بنجاح' };
+    } catch (err: any) {
+      console.error('addOrderDeposit error:', err);
+      return { success: false, message: err?.message || 'حدث خطأ أثناء تسجيل الدفعة' };
+    }
+  };
+
+  const deleteOrder = async (orderId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch(`/api/admin/orders?orderId=${orderId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(staffSession?.id ? { 'x-staff-id': staffSession.id } : {}),
+        },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, message: data.error || 'فشل حذف الطلبية' };
+      }
+      // Remove from local state
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      return { success: true, message: 'تم حذف الطلبية بنجاح' };
+    } catch (err: any) {
+      console.error('deleteOrder error:', err);
+      return { success: false, message: err?.message || 'حدث خطأ أثناء حذف الطلبية' };
+    }
+  };
+
   // Reassign / Assign Sticky Sales Rep directly (CRM — Admin only action, with Data Log recording)
   const assignCustomerSalesRep = async (
     customerId: string,
@@ -3360,6 +3423,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         cancelCustomerOrder,
         updateOrderStatus,
         updateOrderItems,
+        addOrderDeposit,
+        deleteOrder,
 
         shortages,
         submitShortage,
